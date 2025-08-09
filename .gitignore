@@ -1,0 +1,12 @@
+.vscode/
+.github/
+
+assets/
+bin/
+build/
+docs/
+external/
+
+/src/demo_test/
+/src/example/
+/src/test/

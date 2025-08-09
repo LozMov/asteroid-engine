@@ -1,0 +1,247 @@
+#pragma once
+
+#include <memory>
+#include <type_traits>
+#include <unordered_map>
+#include <vector>
+
+#include "Component.hpp"
+#include "Entity.hpp"
+#include "SystemBase.hpp"
+
+class SDL_Renderer;
+
+namespace ast {
+
+class Registry {
+public:
+    // Get a component
+    template <typename T>
+    T* get(Entity entity) {
+        static_assert(std::is_base_of_v<Component, T>, "T must be a Component type");
+        auto storage = componentStorages_.find(Component::getTypeId<T>());
+        if (storage != componentStorages_.end()) {
+            auto it = storage->second.find(entity);
+            if (it != storage->second.end()) {
+                return static_cast<T*>(it->second.get());
+            }
+        }
+        return nullptr;
+    }
+
+    // Get a system
+    template <typename T>
+    T* get() {
+        static_assert(std::is_base_of_v<SystemBase, T>, "T must be a System type");
+        for (auto& system : systems_) {
+            if (auto* systemPtr = dynamic_cast<T*>(system.get())) {
+                return systemPtr;
+            }
+        }
+        return nullptr;
+    }
+
+    Entity createEntity() {
+        Entity entity = nextEntityId_++;
+        entitySignatures_.emplace(entity, Signature{});
+        return entity;
+    }
+
+    // Construct a component
+    template <typename T, typename... Args>
+    T& emplace(Entity entity, Args&&... args) {
+        static_assert(std::is_base_of_v<Component, T>, "T must be a Component type");
+        auto& storage = componentStorages_[Component::getTypeId<T>()];
+        storage[entity] = std::make_unique<T>(std::forward<Args>(args)...);
+        onComponentAdded<T>(entity);
+        return static_cast<T&>(*storage[entity]);
+    }
+
+    // Insert a component
+    template <typename T>
+    T& insert(Entity entity, T component) {
+        static_assert(std::is_base_of_v<Component, T>, "T must be a Component type");
+        auto& storage = componentStorages_[Component::getTypeId<T>()];
+        storage[entity] = std::make_unique<T>(std::move(component));
+        onComponentAdded<T>(entity);
+        return static_cast<T&>(*storage[entity]);
+    }
+
+    template <typename T>
+    void copy(Entity entity, Entity other) {
+        static_assert(std::is_base_of_v<Component, T>, "T must be a Component type");
+        auto storage = componentStorages_.find(Component::getTypeId<T>());
+        if (storage != componentStorages_.end() &&
+            storage->second.find(other) != storage->second.end()) {
+            // Copy construct the component from the other entity
+            storage->second[entity] =
+                std::make_unique<T>(static_cast<const T&>(*storage->second[other]));
+            onComponentAdded<T>(entity);
+        }
+    }
+
+    template <typename T, typename... Args>
+    T& attach(Args&&... args) {
+        static_assert(std::is_base_of_v<SystemBase, T>, "T must be a System type");
+        // Check if we already have a system of this type
+        if (T* existingSystem = get<T>()) {
+            return *existingSystem;
+        }
+        // Create and add the new system
+        systems_.push_back(std::make_unique<T>(std::forward<Args>(args)...));
+        T& system = static_cast<T&>(*systems_.back());
+        // Add the entities that match the system's signature
+        for (const auto& [entity, signature] : entitySignatures_) {
+            if ((signature & system.getSignature()) == system.getSignature()) {
+                system.addEntity(entity);
+            }
+        }
+        system.onAttached();
+        return system;
+    }
+
+    void erase(Entity entity) {
+        onComponentRemoved(entity);
+        entitySignatures_.erase(entity);
+        // Remove the components after notifying systems, so they can access
+        // the components in onEntityRemoved()
+        for (auto& pair : componentStorages_) {
+            pair.second.erase(entity);
+        }
+    }
+
+    template <typename T>
+    void erase(Entity entity) {
+        static_assert(std::is_base_of_v<Component, T>, "T must be a Component type");
+        auto storage = componentStorages_.find(Component::getTypeId<T>());
+        if (storage != componentStorages_.end()) {
+            onComponentRemoved<T>(entity);
+            storage->second.erase(entity);
+        }
+    }
+
+    template <typename T>
+    void erase() {
+        static_assert(std::is_base_of_v<SystemBase, T>, "T must be a System type");
+        auto it = std::find_if(systems_.begin(), systems_.end(),
+                               [](const std::unique_ptr<SystemBase>& system) {
+                                   return dynamic_cast<T*>(system.get()) != nullptr;
+                               });
+        if (it != systems_.end()) {
+            systems_.erase(it);
+        }
+    }
+
+    // Remove all components associated with the entity
+    void eraseComponents(Entity entity) {
+        onComponentRemoved(entity);
+        for (auto& pair : componentStorages_) {
+            pair.second.erase(entity);
+        }
+    }
+
+    template <typename T>
+    bool has(Entity entity) const {
+        auto id = Component::getTypeId<T>();
+        return componentStorages_.find(id) != componentStorages_.end() &&
+               componentStorages_.at(id).find(entity) != componentStorages_.at(id).end();
+    }
+
+    // Checks if the entity has all specified component types by verifying presence in each
+    // component storage
+    template <typename... Ts>
+    bool hasAll(Entity entity) const {
+        return (has<Ts>(entity) && ...);
+    }
+
+    // Expose systems for inspection
+    const std::vector<std::unique_ptr<SystemBase>>& getSystems() const { return systems_; }
+
+    void markAsExpired(Entity entity) { expiredEntities_.push_back(entity); }
+
+    // Update all systems
+    void update(float dt) {
+        for (auto& system : systems_) {
+            system->update(dt);
+        }
+        // Clean up expired entities
+        for (Entity entity : expiredEntities_) {
+            erase(entity);
+        }
+        expiredEntities_.clear();
+    }
+
+    struct Context {
+        enum class GameState { PLAYING, GAME_OVER, PAUSED, QUIT };
+        GameState gameState = GameState::PLAYING;
+        Entity playerEntity = NULL_ENTITY;
+        float screenWidth = 800.0f;
+        float screenHeight = 600.0f;
+        SDL_Renderer* renderer;
+    };
+
+    Context context;
+
+private:
+    template <typename T>
+    void onComponentAdded(Entity entity) {
+        auto typeId = Component::getTypeId<T>();
+        Signature oldSignature = entitySignatures_[entity];
+        if (oldSignature[typeId]) {
+            // Signature does not change, no need to update
+            return;
+        }
+        entitySignatures_[entity].set(typeId);
+
+        for (auto& system : systems_) {
+            if ((system->getSignature() & oldSignature) != system->getSignature()) {
+                // The entity did not match the system's signature before, but does now
+                if ((system->getSignature() & entitySignatures_[entity]) ==
+                    system->getSignature()) {
+                    system->addEntity(entity);
+                }
+            }
+        }
+    }
+
+    template <typename T>
+    void onComponentRemoved(Entity entity) {
+        auto typeId = Component::getTypeId<T>();
+        Signature oldSignature = entitySignatures_[entity];
+        if (!oldSignature[typeId]) {
+            // Component does not exist, no need to update signature
+            return;
+        }
+        entitySignatures_[entity].reset(typeId);
+
+        for (auto& system : systems_) {
+            if ((system->getSignature() & oldSignature) == system->getSignature()) {
+                // The entity matched the system's signature before, but does not now
+                if ((system->getSignature() & entitySignatures_[entity]) !=
+                    system->getSignature()) {
+                    system->removeEntity(entity);
+                }
+            }
+        }
+    }
+
+    void onComponentRemoved(Entity entity) {
+        Signature oldSignature = entitySignatures_[entity];
+        entitySignatures_[entity].reset();
+
+        for (auto& system : systems_) {
+            if ((system->getSignature() & oldSignature) == system->getSignature()) {
+                system->removeEntity(entity);
+            }
+        }
+    }
+
+    std::vector<Entity> expiredEntities_;
+    std::unordered_map<Entity, Signature> entitySignatures_;
+    std::unordered_map<Component::TypeId, std::unordered_map<Entity, std::unique_ptr<Component>>>
+        componentStorages_;
+    std::vector<std::unique_ptr<SystemBase>> systems_;
+    Entity nextEntityId_ = 1;  // NULL_ENTITY is 0
+};
+
+}  // namespace ast
