@@ -41,9 +41,24 @@ public:
         return nullptr;
     }
 
+    // Get a prefab
+    Entity get(const std::string& name) {
+        auto it = prefabEntities_.find(name);
+        if (it != prefabEntities_.end()) {
+            return it->second;
+        }
+        return NULL_ENTITY;  // Return a null entity if not found
+    }
+
     Entity createEntity() {
         Entity entity = nextEntityId_++;
         entitySignatures_.emplace(entity, Signature{});
+        return entity;
+    }
+
+    Entity createPrefab(const std::string& name) {
+        Entity entity = nextEntityId_++;
+        prefabEntities_[name] = entity;
         return entity;
     }
 
@@ -57,6 +72,16 @@ public:
         return static_cast<T&>(*storage[entity]);
     }
 
+    // Construct a component for a prefab
+    template <typename T, typename... Args>
+    T& emplace(const std::string& prefabName, Args&&... args) {
+        static_assert(std::is_base_of_v<Component, T>, "T must be a Component type");
+        auto& storage = componentStorages_[Component::getTypeId<T>()];
+        Entity prefab = prefabEntities_[prefabName];
+        storage[prefab] = std::make_unique<T>(std::forward<Args>(args)...);
+        return static_cast<T&>(*storage[prefab]);
+    }
+
     // Insert a component
     template <typename T>
     T& insert(Entity entity, T component) {
@@ -67,17 +92,28 @@ public:
         return static_cast<T&>(*storage[entity]);
     }
 
+    // Insert a component for a prefab
+    template <typename T>
+    T& insert(const std::string& prefabName, T component) {
+        static_assert(std::is_base_of_v<Component, T>, "T must be a Component type");
+        auto& storage = componentStorages_[Component::getTypeId<T>()];
+        Entity prefab = prefabEntities_[prefabName];
+        storage[prefab] = std::make_unique<T>(std::move(component));
+        return static_cast<T&>(*storage[prefab]);
+    }
+
     template <typename T>
     void copy(Entity entity, Entity other) {
         static_assert(std::is_base_of_v<Component, T>, "T must be a Component type");
-        auto storage = componentStorages_.find(Component::getTypeId<T>());
-        if (storage != componentStorages_.end() &&
-            storage->second.find(other) != storage->second.end()) {
-            // Copy construct the component from the other entity
-            storage->second[entity] =
-                std::make_unique<T>(static_cast<const T&>(*storage->second[other]));
-            onComponentAdded<T>(entity);
+        // Copy construct the component from the other entity
+        if (T* otherComponent = get<T>(other)) {
+            emplace<T>(entity, *otherComponent);
         }
+    }
+
+    template <typename... Ts>
+    void copyAll(Entity entity, Entity other) {
+        (copy<Ts>(entity, other), ...);
     }
 
     template <typename T, typename... Args>
@@ -143,8 +179,7 @@ public:
     template <typename T>
     bool has(Entity entity) const {
         auto id = Component::getTypeId<T>();
-        return componentStorages_.find(id) != componentStorages_.end() &&
-               componentStorages_.at(id).find(entity) != componentStorages_.at(id).end();
+        return entitySignatures_.at(entity).test(id);
     }
 
     // Checks if the entity has all specified component types by verifying presence in each
@@ -237,6 +272,7 @@ private:
     }
 
     std::vector<Entity> expiredEntities_;
+    std::unordered_map<std::string, Entity> prefabEntities_;
     std::unordered_map<Entity, Signature> entitySignatures_;
     std::unordered_map<Component::TypeId, std::unordered_map<Entity, std::unique_ptr<Component>>>
         componentStorages_;
