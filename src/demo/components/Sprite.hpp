@@ -17,7 +17,7 @@ struct Sprite : ast::Component {
     enum class ScalingMode { NONE, CENTER, STRETCH, FIT, FILL, TILED };
     enum class FlipMode { NONE, HORIZONTAL, VERTICAL, BOTH };
 
-    explicit Sprite(const ast::Color& color)
+    explicit Sprite(const ast::Color& color = ast::Color::MAGENTA)
         : texture(ast::Cache::MISSING_TEXTURE), color(color), hasTexture(false) {}
 
     explicit Sprite(const ast::Texture& texture, const ast::Vector2& logicalSize = ast::Vector2())
@@ -56,24 +56,23 @@ struct Sprite : ast::Component {
            const ast::Vector2& logicalSize = ast::Vector2())
         : Sprite(ast::Cache::getTexture(fileName), frameCountX, frameCountY, logicalSize) {}
 
-    std::vector<SDL_FRect> frames;
-    ast::Texture texture;
+    std::vector<SDL_FRect> frames;  // Set by constructor
+    ast::Texture texture;           // Set by constructor
     ast::Vector2 logicalSize;
-    ast::Vector2 origin;
+    ast::Vector2 origin;  // Normalized coordinates
     ast::Color color;
-    float rotation = 0.0f;
     int zIndex = 0;
 
-    int frameCountX = 1;
-    int frameCountY = 1;
-    int frameCount = 1;
+    int frameCountX = 1;  // Set by constructor
+    int frameCountY = 1;  // Set by constructor
+    int frameCount = 1;   // Set by constructor
     int frameIndex = 0;
 
     ScalingMode scalingMode = ScalingMode::NONE;
     FlipMode flipMode = FlipMode::NONE;
     bool visible = true;
-    bool hasTexture = true;
-    bool isFrame = false;
+    bool hasTexture = true;  // Set by constructor
+    bool isFrame = false;    // Set by constructor
 };
 
 }  // namespace astd::components

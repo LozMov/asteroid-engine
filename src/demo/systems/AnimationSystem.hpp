@@ -20,12 +20,16 @@ public:
                 animation->frameTimeElapsed += dt;
                 if (animation->frameTimeElapsed >= animation->frameDuration) {
                     animation->frameTimeElapsed = 0.0f;
-                    if (++sprite->frameIndex == sprite->frameCount) {
+                    int sequenceEndIndex =
+                        (animation->frameCount == -1
+                             ? sprite->frameCount
+                             : animation->frameCount + animation->frameStartIndex);
+                    if (++sprite->frameIndex >= sequenceEndIndex) {
                         if (animation->loop) {
-                            sprite->frameIndex = 0;
+                            sprite->frameIndex = animation->frameStartIndex;
                         } else {
                             // Stop at the last frame if not looping
-                            --sprite->frameIndex;
+                            sprite->frameIndex = sequenceEndIndex - 1;
                             animation->playing = false;
                         }
                     }
