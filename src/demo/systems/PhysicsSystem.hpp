@@ -29,7 +29,7 @@ public:
 
 private:
     void syncTransformToPhysics(ast::Entity entity);
-    void syncPhysicsToTransform(ast::Entity entity);
+    void syncPhysicsToTransform(ast::Entity entity, b2BodyId bodyId, b2Transform physicsTransform);
     void createRigidBody(ast::Entity entity);
     void destroyRigidBody(ast::Entity entity);
 

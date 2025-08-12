@@ -49,17 +49,16 @@ void PhysicsSystem::update(float dt) {
     //     ast::events::EventBus::publish(event);
     // }
 
-    // Sync physics bodies to transforms
-    // b2BodyEvents bodyEvents = b2World_GetBodyEvents(world_);
-    // for (int i = 0; i < bodyEvents.moveCount; ++i) {
-    //     b2BodyMoveEvent* moveEvent = bodyEvents.moveEvents + i;
-    //     syncPhysicsToTransform(reinterpret_cast<Entity>(moveEvent->userData));
-    // }
+    b2BodyEvents bodyEvents = b2World_GetBodyEvents(world_);
+    for (int i = 0; i < bodyEvents.moveCount; ++i) {
+        b2BodyMoveEvent* moveEvent = bodyEvents.moveEvents + i;
+        syncPhysicsToTransform(reinterpret_cast<Entity>(moveEvent->userData), moveEvent->bodyId,
+                               moveEvent->transform);
+    }
 
     static int test = 0;
     ++test;
     for (auto entity : entities_) {
-        syncPhysicsToTransform(entity);
         if (test == 60) {
             auto* r = registry_.get<RigidBody>(entity);
             auto c1 = b2Body_GetPosition(r->handle);
@@ -143,30 +142,25 @@ void PhysicsSystem::syncTransformToPhysics(Entity entity) {
     auto* rigidBody = registry_.get<RigidBody>(entity);
 }
 
-void PhysicsSystem::syncPhysicsToTransform(Entity entity) {
+void PhysicsSystem::syncPhysicsToTransform(Entity entity, b2BodyId bodyId,
+                                           b2Transform physicsTransform) {
     auto* transform = registry_.get<Transform>(entity);
-    auto* rigidBody = registry_.get<RigidBody>(entity);
     auto* sprite = registry_.get<Sprite>(entity);
-    if (b2Body_IsValid(rigidBody->handle)) {
-        b2Transform physicsTransform = b2Body_GetTransform(rigidBody->handle);
+    // Get physics body position in pixels (center of sprite)
+    ast::Vector2 physicsPos = {physicsTransform.p.x * PIXELS_PER_METER,
+                               physicsTransform.p.y * PIXELS_PER_METER};
 
-        // Get physics body position in pixels (center of sprite)
-        ast::Vector2 physicsPos = {physicsTransform.p.x * PIXELS_PER_METER,
-                                   physicsTransform.p.y * PIXELS_PER_METER};
-
-        // Calculate transform position (sprite origin point) from center
-        if (sprite) {
-            float logicalSizeX = sprite->size.x * transform->scale.x;
-            float logicalSizeY = sprite->size.y * transform->scale.y;
-            transform->position = {physicsPos.x - (0.5f - sprite->origin.x) * logicalSizeX,
-                                   physicsPos.y - (0.5f - sprite->origin.y) * logicalSizeY};
-        } else {
-            // No sprite, use physics position directly
-            transform->position = physicsPos;
-        }
-
-        transform->rotation = b2Rot_GetAngle(physicsTransform.q) * RAD_TO_DEG;
+    // Calculate transform position (sprite origin point) from center
+    if (sprite) {
+        float logicalSizeX = sprite->size.x * transform->scale.x;
+        float logicalSizeY = sprite->size.y * transform->scale.y;
+        transform->position = {physicsPos.x - (0.5f - sprite->origin.x) * logicalSizeX,
+                               physicsPos.y - (0.5f - sprite->origin.y) * logicalSizeY};
+    } else {
+        // No sprite, use physics position directly
+        transform->position = physicsPos;
     }
+    transform->rotation = b2Rot_GetAngle(physicsTransform.q) * RAD_TO_DEG;
 }
 
 void PhysicsSystem::createRigidBody(Entity entity) {}
