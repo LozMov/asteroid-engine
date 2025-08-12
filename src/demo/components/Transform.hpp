@@ -10,9 +10,10 @@ struct Transform : ast::Component {
               const ast::Vector2& scale = ast::Vector2(1.0f, 1.0f))
         : position(position), rotation(rotation), scale(scale) {}
 
+    /// The position of the sprite's origin point (where the sprite should be drawn)
     ast::Vector2 position;
-    ast::Vector2 scale;
-    float rotation;
+    ast::Vector2 scale = ast::Vector2(1.0f, 1.0f);
+    float rotation = 0.0f;
 };
 
 }  // namespace astd::components

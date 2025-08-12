@@ -18,8 +18,8 @@ void RenderSystem::update(float dt) {
         auto* sprite = registry_.get<Sprite>(entity);
         auto* transform = registry_.get<Transform>(entity);
         ast::Vector2 position = transform->position;
-        float logicalSizeX = sprite->logicalSize.x * transform->scale.x;
-        float logicalSizeY = sprite->logicalSize.y * transform->scale.y;
+        float logicalSizeX = sprite->size.x * transform->scale.x;
+        float logicalSizeY = sprite->size.y * transform->scale.y;
         ast::Vector2 origin = sprite->origin;
         SDL_FRect* srcRectPtr = sprite->isFrame ? &sprite->frames[sprite->frameIndex] : nullptr;
 
@@ -35,13 +35,9 @@ void RenderSystem::update(float dt) {
 
         SDL_FRect dstRect = {drawX, drawY, logicalSizeX, logicalSizeY};
 
-        if (sprite->hasTexture) {
+        if (sprite->visible) {
             switch (sprite->scalingMode) {
-                case Sprite::ScalingMode::TILED:
-                    SDL_RenderTextureTiled(renderer_, sprite->texture.handle, srcRectPtr,
-                                           transform->scale.x, &dstRect);
-                    break;
-                default:
+                case Sprite::ScalingMode::DEFAULT:
                     if (transform->rotation == 0.0f && sprite->flipMode == Sprite::FlipMode::NONE) {
                         SDL_RenderTexture(renderer_, sprite->texture.handle, srcRectPtr, &dstRect);
                     } else {
@@ -51,11 +47,17 @@ void RenderSystem::update(float dt) {
                                                  static_cast<SDL_FlipMode>(sprite->flipMode));
                     }
                     break;
+                case Sprite::ScalingMode::TILED:
+                    SDL_RenderTextureTiled(renderer_, sprite->texture.handle, srcRectPtr,
+                                           transform->scale.x, &dstRect);
+                    break;
+                case Sprite::ScalingMode::NINE_GRID:
+                    auto [leftWidth, rightWidth, topHeight, bottomHeight] = sprite->frames[0];
+                    SDL_RenderTexture9Grid(renderer_, sprite->texture.handle, srcRectPtr, leftWidth,
+                                           rightWidth, topHeight, bottomHeight, transform->scale.x,
+                                           &dstRect);
+                    break;
             }
-        } else {
-            auto color = sprite->color;
-            SDL_SetRenderDrawColor(renderer_, color.r, color.g, color.b, color.a);
-            SDL_RenderFillRect(renderer_, &dstRect);
         }
     }
 }
