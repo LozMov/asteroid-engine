@@ -14,8 +14,8 @@
 #include "components/Sprite.hpp"
 #include "components/Transform.hpp"
 
-#define GET_PROPERTY(comp, prop) \
-    if (compData.contains(#prop)) comp.prop = compData[#prop].get<decltype(comp.prop)>()
+#define GET_PROPERTY(data, comp, prop) \
+    if (data.contains(#prop)) comp.prop = data[#prop].get<decltype(comp.prop)>()
 
 namespace ast {
 
@@ -42,14 +42,13 @@ void to_json(nlohmann::json& j, const RigidBody::BodyType& bodyType) {
 
 void from_json(const nlohmann::json& j, RigidBody::BodyType& bodyType) {
     std::string str = j.get<std::string>();
-    if (str == "STATIC")
-        bodyType = RigidBody::BodyType::STATIC;
-    else if (str == "KINEMATIC")
+    if (str == "KINEMATIC") {
         bodyType = RigidBody::BodyType::KINEMATIC;
-    else if (str == "DYNAMIC")
+    } else if (str == "DYNAMIC") {
         bodyType = RigidBody::BodyType::DYNAMIC;
-    else
+    } else {
         bodyType = RigidBody::BodyType::STATIC;
+    }
 }
 
 void to_json(nlohmann::json& j, const RigidBody::CollisionCategory& category) {
@@ -117,10 +116,10 @@ void from_json(const nlohmann::json& j, Sprite::ScalingMode& scalingMode) {
     std::string str = j.get<std::string>();
     if (str == "TILED") {
         scalingMode = Sprite::ScalingMode::TILED;
-    } else if (str == "STRETCH") {
-        scalingMode = Sprite::ScalingMode::STRETCH;
+    } else if (str == "NINE_GRID") {
+        scalingMode = Sprite::ScalingMode::NINE_GRID;
     } else {
-        scalingMode = Sprite::ScalingMode::NONE;
+        scalingMode = Sprite::ScalingMode::DEFAULT;
     }
 }
 
@@ -145,26 +144,26 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(RigidBody, bodyType, collisionCa
 
 using nlohmann::json;
 
-static Sprite loadSprite(const std::string& prefabName, const json& compData) {
-    if (compData.contains("fileName")) {
-        if (compData.contains("frameCountX")) {
-            // Sprite sheet
-            Sprite sprite(compData["fileName"], compData["frameCountX"], compData["frameCountY"]);
-            sprite.frameIndex = compData.value("frameIndex", 0);
-            GET_PROPERTY(sprite, scalingMode);
-            GET_PROPERTY(sprite, flipMode);
-            return sprite;
-        } else {
-            Sprite sprite(compData["fileName"].get<std::string>());
-            GET_PROPERTY(sprite, scalingMode);
-            GET_PROPERTY(sprite, flipMode);
-            return sprite;
-        }
-    } else if (compData.contains("color")) {
-        Sprite sprite(compData["color"].get<ast::Color>());
-        return sprite;
+static Sprite loadSprite(const std::string& prefabName, const json& j) {
+    Sprite sprite =
+        j.contains("fileName")
+            ? j.value("scalingMode", Sprite::ScalingMode::DEFAULT) == Sprite::ScalingMode::NINE_GRID
+                  ? Sprite(j["fileName"], j["leftWidth"], j["rightWidth"], j["topHeight"],
+                           j["bottomHeight"])
+                  : Sprite(j["fileName"].get<std::string>())
+
+            : Sprite(j["color"].get<ast::Color>());
+    if (j.contains("frameCountX") || j.contains("frameCountY")) {
+        sprite.calculateFrames(j.value("frameCountX", 1), j.value("frameCountY", 1));
     }
-    return Sprite{};
+    GET_PROPERTY(j, sprite, size);
+    GET_PROPERTY(j, sprite, origin);
+    GET_PROPERTY(j, sprite, zIndex);
+    GET_PROPERTY(j, sprite, frameIndex);
+    GET_PROPERTY(j, sprite, scalingMode);
+    GET_PROPERTY(j, sprite, flipMode);
+    GET_PROPERTY(j, sprite, visible);
+    return sprite;
 }
 
 std::vector<std::string> Prefab::loadPrefabsFromFile(ast::Registry& registry,
@@ -189,13 +188,7 @@ std::vector<std::string> Prefab::loadPrefabsFromFile(ast::Registry& registry,
             if (compName == "Animation") {
                 registry.insert(prefabName, compData.get<Animation>());
             } else if (compName == "Sprite") {
-                auto sprite = loadSprite(prefabName, compData);
-                GET_PROPERTY(sprite, origin);
-                GET_PROPERTY(sprite, logicalSize);
-                GET_PROPERTY(sprite, frameIndex);
-                GET_PROPERTY(sprite, visible);
-                GET_PROPERTY(sprite, zIndex);
-                registry.insert(prefabName, sprite);
+                registry.insert(prefabName, loadSprite(prefabName, compData));
             } else if (compName == "Transform") {
                 registry.insert(prefabName, compData.get<Transform>());
             } else if (compName == "RigidBody") {

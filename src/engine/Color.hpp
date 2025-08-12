@@ -7,6 +7,11 @@ namespace ast {
 struct Color {
     constexpr Color() = default;
     constexpr Color(uint8_t r, uint8_t g, uint8_t b, uint8_t a = 255) : r(r), g(g), b(b), a(a) {}
+    constexpr Color(uint32_t color)
+        : r((color >> 24) & 0xFF),
+          g((color >> 16) & 0xFF),
+          b((color >> 8) & 0xFF),
+          a(color & 0xFF) {}
 
     constexpr operator uint32_t() const { return r << 24 | g << 16 | b << 8 | a; }
 
