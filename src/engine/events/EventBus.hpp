@@ -7,18 +7,14 @@
 #include <unordered_map>
 #include <vector>
 
-#include "Event.hpp"
-
 namespace ast {
-    using events::Event;
 
 class EventBus {
 public:
     using SubscriptionId = std::size_t;
     using EventTypeId = std::size_t;
 
-    template <typename T>
-    using Handler = std::function<void(const T&)>;
+    using Handler = std::function<void(const void*)>;
 
     EventBus(const EventBus&) = delete;
     EventBus& operator=(const EventBus&) = delete;
@@ -44,12 +40,7 @@ public:
      * @return A Subscription ID that can be used to unsubscribe later
      */
     template <typename T>
-    static SubscriptionId subscribe(const Handler<Event>& handler) {
-        return getInstance().subscribeImpl(getTypeId<T>(), handler);
-    }
-
-    template <typename T>
-    static SubscriptionId subscribe(Handler<Event>&& handler) {
+    static SubscriptionId subscribe(Handler handler) {
         return getInstance().subscribeImpl(getTypeId<T>(), std::move(handler));
     }
 
@@ -74,7 +65,7 @@ public:
 
     template <typename T, typename... Args>
     static void publish(Args&&... args) {
-        getInstance().publishImpl(T(std::forward<Args>(args)...));
+        getInstance().publishImpl(T{std::forward<Args>(args)...});
     }
 
     void clear() {
@@ -91,7 +82,7 @@ private:
         return index;
     }
 
-    SubscriptionId subscribeImpl(EventTypeId typeIndex, Handler<Event> handler) {
+    SubscriptionId subscribeImpl(EventTypeId typeIndex, Handler&& handler) {
         std::lock_guard<std::mutex> lock(mutex_);
         auto id = s_id++;
         handlers_[typeIndex].emplace_back(id, std::move(handler));
@@ -115,7 +106,7 @@ private:
         if (it != handlers_.end()) {
             // Iterate over all handlers for this event type
             for (auto& pair : it->second) {
-                pair.second(event);
+                pair.second(&event);
             }
         }
     }
@@ -124,7 +115,7 @@ private:
     inline static EventTypeId s_typeIndex = 0;
 
     // Map of event type ID to a vector of pairs (subscription ID, handler)
-    std::unordered_map<EventTypeId, std::vector<std::pair<SubscriptionId, Handler<Event>>>>
+    std::unordered_map<EventTypeId, std::vector<std::pair<SubscriptionId, Handler>>>
         handlers_;
     std::mutex mutex_;
 };

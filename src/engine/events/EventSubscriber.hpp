@@ -1,19 +1,15 @@
 #pragma once
 
-#include <type_traits>
-
 #include "EventBus.hpp"
 
 namespace ast {
 
 template <typename T>
 class EventSubscriber {
-    static_assert(std::is_base_of_v<Event, T>, "EventSubscriber must be used with an Event type");
-
 protected:
     EventSubscriber()
         : subscription_(EventBus::subscribe<T>(
-              [this](const Event& event) { onEvent(static_cast<const T&>(event)); })) {}
+              [this](const void* event) { onEvent(*static_cast<const T*>(event)); })) {}
 
     virtual ~EventSubscriber() { EventBus::unsubscribe<T>(subscription_); }
 
