@@ -14,6 +14,7 @@ public:
     RenderSystem(ast::Registry& registry);
 
     void update(float dt) override;
+    void onEntityAdded(ast::Entity entity) override;
 
 private:
     SDL_Renderer* renderer_{};
