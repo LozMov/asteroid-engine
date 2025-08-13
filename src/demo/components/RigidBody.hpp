@@ -1,5 +1,7 @@
 #pragma once
 
+#include <string>
+
 #include "box2d/box2d.h"
 
 #include "engine/Vector2.hpp"
@@ -23,10 +25,11 @@ struct RigidBody : ast::Component {
         ALL = 0xFFFF
     } collisionCategory = CollisionCategory::ALL;
 
-    b2BodyId handle{};
+    b2BodyId handle = b2_nullBodyId;
+    std::string name;
     ast::Vector2 size;
     ast::Vector2 linearVelocity;
-    float angularVelocity;
+    float angularVelocity = 0.0f;
     float mass = 1.0f;
     float restitution = 0.0f;
     float friction = 0.2f;
