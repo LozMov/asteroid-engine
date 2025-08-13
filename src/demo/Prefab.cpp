@@ -10,9 +10,11 @@
 #include "engine/ecs/Registry.hpp"
 
 #include "components/Animation.hpp"
+#include "components/Camera.hpp"
 #include "components/RigidBody.hpp"
 #include "components/Sprite.hpp"
 #include "components/Transform.hpp"
+#include "components/Player.hpp"
 
 #define GET_PROPERTY(data, comp, prop) \
     if (data.contains(#prop)) comp.prop = data[#prop].get<decltype(comp.prop)>()
@@ -134,13 +136,16 @@ void from_json(const nlohmann::json& j, Sprite::FlipMode& flipMode) {
     }
 }
 
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(Camera, target, position, screenSize, lerp, zoom)
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(Animation, frameCount, frameStartIndex,
                                                 frameDuration, loop, playing)
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(Transform, position, rotation, scale)
-NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(RigidBody, bodyType, collisionCategory, size,
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(RigidBody, bodyType, collisionCategory, name, size,
                                                 linearVelocity, angularVelocity, mass, restitution,
                                                 friction, gravityScale, linearDamping,
                                                 angularDamping, fixedRotation, isEnabled, isBullet)
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(Player, walkSpeed, runSpeed, airSpeed, jumpImpulse, jumpBufferDuration,
+                                                coyoteDuration)
 
 using nlohmann::json;
 
@@ -153,16 +158,24 @@ static Sprite loadSprite(const std::string& prefabName, const json& j) {
                   : Sprite(j["fileName"].get<std::string>())
 
             : Sprite(j["color"].get<ast::Color>());
+    
+    if (prefabName == "Player") {
+        AST_INFO("Player sprite loaded: fileName={}, texture valid={}, size=({}, {})", 
+                 j.value("fileName", "none"), sprite.texture.handle != nullptr, 
+                 sprite.size.x, sprite.size.y);
+    }
     if (j.contains("frameCountX") || j.contains("frameCountY")) {
         sprite.calculateFrames(j.value("frameCountX", 1), j.value("frameCountY", 1));
     }
     GET_PROPERTY(j, sprite, size);
     GET_PROPERTY(j, sprite, origin);
+    GET_PROPERTY(j, sprite, parallaxFactor);
     GET_PROPERTY(j, sprite, zIndex);
     GET_PROPERTY(j, sprite, frameIndex);
     GET_PROPERTY(j, sprite, scalingMode);
     GET_PROPERTY(j, sprite, flipMode);
     GET_PROPERTY(j, sprite, visible);
+    GET_PROPERTY(j, sprite, isBackground);
     return sprite;
 }
 
@@ -180,8 +193,6 @@ std::vector<std::string> Prefab::loadPrefabsFromFile(ast::Registry& registry,
 
     for (const auto& prefab : prefabsJson) {
         std::string prefabName = prefab["name"];
-        AST_INFO("Creating prefab: '{}'", prefabName);
-
         auto entity = registry.createPrefab(prefabName);
 
         for (const auto& [compName, compData] : prefab["components"].items()) {
@@ -190,9 +201,23 @@ std::vector<std::string> Prefab::loadPrefabsFromFile(ast::Registry& registry,
             } else if (compName == "Sprite") {
                 registry.insert(prefabName, loadSprite(prefabName, compData));
             } else if (compName == "Transform") {
-                registry.insert(prefabName, compData.get<Transform>());
+                auto transform = compData.get<Transform>();
+                if (prefabName == "Player") {
+                    AST_INFO("Player transform loaded: pos=({}, {}), scale=({}, {})", 
+                             transform.position.x, transform.position.y, 
+                             transform.scale.x, transform.scale.y);
+                }
+                registry.insert(prefabName, transform);
             } else if (compName == "RigidBody") {
-                registry.insert(prefabName, compData.get<RigidBody>());
+                auto rigidBody = compData.get<RigidBody>();
+                rigidBody.name = compData.value("name", prefabName);
+                registry.insert(prefabName, rigidBody);
+            } else if (compName == "Player") {
+                auto player = compData.get<Player>();
+                registry.insert(prefabName, player);
+            } else if (compName == "Camera") {
+                auto camera = compData.get<Camera>();
+                registry.insert(prefabName, camera);
             } else {
                 AST_WARN("Unknown component type: {}", compName);
             }
@@ -206,7 +231,8 @@ std::vector<std::string> Prefab::loadPrefabsFromFile(ast::Registry& registry,
 ast::Entity Prefab::createEntityFromPrefab(ast::Registry& registry, const std::string& prefabName) {
     auto entity = registry.createEntity();
     auto prefab = registry.get(prefabName);
-    registry.copyAll<Animation, Sprite, Transform, RigidBody>(entity, prefab);
+    registry.copyAll<Animation, Sprite, Transform, RigidBody, Player, Camera>(entity, prefab, false);
+    registry.forceAdd(entity);
     return entity;
 }
 

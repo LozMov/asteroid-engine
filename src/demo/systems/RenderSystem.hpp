@@ -4,6 +4,7 @@
 
 #include "../components/Sprite.hpp"
 #include "../components/Transform.hpp"
+#include "../components/Camera.hpp"
 
 class SDL_Renderer;
 
@@ -18,6 +19,8 @@ public:
 
 private:
     SDL_Renderer* renderer_{};
+    ast::Entity playerEntity_{};
+    components::Camera* camera_{};
     float screenWidth_ = 800;
     float screenHeight_ = 600;
 };

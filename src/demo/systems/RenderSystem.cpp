@@ -1,7 +1,7 @@
 #include "RenderSystem.hpp"
 
 #include "engine/Color.hpp"
-#include "engine/ecs/Registry.hpp"
+#include "../components/Player.hpp"
 
 namespace astd::systems {
 
@@ -19,6 +19,15 @@ void RenderSystem::update(float dt) {
         if (!sprite->visible) {
             continue;
         }
+
+        if (!camera_) {
+            for (const auto& [_, cameraPtr] : registry_.getAll<Camera>()) {
+                camera_ = static_cast<Camera*>(cameraPtr.get());
+                camera_->target = playerEntity_;
+                break;
+            }
+        }
+
         auto* transform = registry_.get<Transform>(entity);
         ast::Vector2 position = transform->position;
         float logicalSizeX = sprite->size.x * transform->scale.x;
@@ -30,10 +39,27 @@ void RenderSystem::update(float dt) {
         float drawX = position.x - origin.x * logicalSizeX;
         float drawY = position.y - origin.y * logicalSizeY;
 
-        // Basic culling - skip rendering if completely off-screen
-        if (drawX + logicalSizeX < 0 || drawX > screenWidth_ || drawY + logicalSizeY < 0 ||
-            drawY > screenHeight_) {
-            continue;
+        if (camera_) {
+            drawX -= camera_->position.x * sprite->parallaxFactor;
+            drawY -= camera_->position.y * sprite->parallaxFactor;
+        }
+
+        if (sprite->isBackground) {
+            // Calculate starting tile position (wrap the offset)
+            float offsetX = std::fmod(drawX, logicalSizeX);
+            float offsetY = std::fmod(drawY, logicalSizeY);
+            if (offsetX > 0) offsetX -= logicalSizeX;
+            if (offsetY > 0) offsetY -= logicalSizeY;
+            drawX = offsetX;
+            drawY = offsetY;
+            logicalSizeX = screenWidth_  + logicalSizeX;
+            logicalSizeY = screenHeight_ + logicalSizeY;
+        } else {
+            // Basic culling - skip rendering if completely off-screen
+            if (drawX + logicalSizeX < 0 || drawX > screenWidth_ || drawY + logicalSizeY < 0 ||
+                drawY > screenHeight_) {
+                continue;
+            }
         }
 
         SDL_FRect dstRect = {drawX, drawY, logicalSizeX, logicalSizeY};
@@ -72,6 +98,9 @@ void RenderSystem::onEntityAdded(ast::Entity entity) {
         auto* spriteB = registry_.get<Sprite>(b);
         return spriteA->zIndex < spriteB->zIndex;
     });
+    if (registry_.has<Player>(entity)) {
+        playerEntity_ = entity;
+    }
 }
 
 }  // namespace astd::systems

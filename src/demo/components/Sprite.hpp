@@ -49,7 +49,8 @@ struct Sprite : ast::Component {
         frames.push_back({leftWidth, rightWidth, topHeight, bottomHeight});
     }
 
-    void calculateFrames(int frameCountX, int frameCountY, const ast::Vector2& size = ast::Vector2()) {
+    void calculateFrames(int frameCountX, int frameCountY,
+                         const ast::Vector2& size = ast::Vector2()) {
         frames.clear();
         frameCount = frameCountX * frameCountY;
         frames.reserve(frameCount);
@@ -75,6 +76,7 @@ struct Sprite : ast::Component {
     ast::Vector2 size;
     ast::Vector2 origin;  // Normalized coordinates
     // ast::Color color;
+    float parallaxFactor = 1.0f;  // 0 = static, 1 = moves with camera
     int zIndex = 0;
 
     int frameCountX = 1;  // Set by constructor
@@ -85,6 +87,7 @@ struct Sprite : ast::Component {
     ScalingMode scalingMode = ScalingMode::DEFAULT;
     FlipMode flipMode = FlipMode::NONE;
     bool visible = true;
+    bool isBackground = false;
     bool isFrame = false;  // Set by constructor
 };
 
