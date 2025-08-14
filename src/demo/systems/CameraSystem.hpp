@@ -24,9 +24,15 @@ public:
                 } else {
                     camera->position = targetPos;  // Snap to target if close enough
                 }
+                // Clamp camera position to the world bounds
+                camera->position.x = std::clamp(camera->position.x, 0.0f, worldWidth - camera->screenSize.x);
+                camera->position.y = std::clamp(camera->position.y, 0.0f, worldHeight - camera->screenSize.y);
             }
         }
     }
+
+    float worldWidth = 1920.0f;
+    float worldHeight = 1080.0f;
 };
 
 }  // namespace astd::systems
