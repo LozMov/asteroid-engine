@@ -58,15 +58,15 @@ public:
      * Publish an event to all subscribers.
      * @param event The event to publish
      */
-    // template <typename T>
-    // static void publish(const T& event) {
-    //     getInstance().publishImpl(event);
-    // }
-
-    template <typename T, typename... Args>
-    static void publish(Args&&... args) {
-        getInstance().publishImpl(T{std::forward<Args>(args)...});
+    template <typename T>
+    static void publish(const T& event) {
+        getInstance().publishImpl(event);
     }
+
+    // template <typename T, typename... Args>
+    // static void publish(Args&&... args) {
+    //     getInstance().publishImpl(T{std::forward<Args>(args)...});
+    // }
 
     void clear() {
         std::lock_guard<std::mutex> lock(mutex_);

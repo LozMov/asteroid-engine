@@ -22,7 +22,7 @@ struct Animation : ast::Component {
     float frameDuration = 0.0f;
     float frameTimeElapsed = 0.0f;  // Set by AnimationSystem
     bool loop = true;
-    bool playing = false;
+    bool playing = true;
 
     // inline static const std::vector<std::vector<int>> CHARACTER_SEQUENCES = {
     //     {0, 1, 2, 3}, {4, 5, 6, 7}, {8, 9, 10, 11}, {12, 13, 14, 15}};

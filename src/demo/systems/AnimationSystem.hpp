@@ -24,6 +24,10 @@ public:
                         (animation->frameCount == -1
                              ? sprite->frameCount
                              : animation->frameCount + animation->frameStartIndex);
+                    // Reset frame index if it's not in the current sequence
+                    if (sprite->frameIndex < animation->frameStartIndex) {
+                        sprite->frameIndex = animation->frameStartIndex;
+                    }
                     if (++sprite->frameIndex >= sequenceEndIndex) {
                         if (animation->loop) {
                             sprite->frameIndex = animation->frameStartIndex;

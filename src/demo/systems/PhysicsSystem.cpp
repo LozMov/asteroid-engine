@@ -229,13 +229,15 @@ void PhysicsSystem::applyCommand(const PhysicsCommand& event) {
     }
     switch (event.type) {
         case PhysicsCommand::Type::APPLY_FORCE:
-            b2Body_ApplyForce(rigidBody->handle, event.vector, event.point, true);
+            b2Body_ApplyForce(rigidBody->handle, event.vector,
+                              b2Body_GetWorldPoint(rigidBody->handle, event.point), true);
             break;
         case PhysicsCommand::Type::APPLY_TORQUE:
             b2Body_ApplyTorque(rigidBody->handle, event.scalar, true);
             break;
         case PhysicsCommand::Type::APPLY_LINEAR_IMPULSE:
-            b2Body_ApplyLinearImpulse(rigidBody->handle, event.vector, event.point, true);
+            b2Body_ApplyLinearImpulse(rigidBody->handle, event.vector,
+                                      b2Body_GetWorldPoint(rigidBody->handle, event.point), true);
             break;
         case PhysicsCommand::Type::APPLY_ANGULAR_IMPULSE:
             b2Body_ApplyAngularImpulse(rigidBody->handle, event.scalar, true);
