@@ -5,6 +5,7 @@
 #include "PhysicsSystem.hpp"
 #include "../components/Animation.hpp"
 #include "../components/Player.hpp"
+#include "../components/Sprite.hpp"
 
 namespace astd::systems {
 
@@ -30,22 +31,30 @@ void PlayerControlSystem::update(float dt) {
 
         // Horizontal movement
         float velocityX = 0.0f;
+        
+        // TODO Switch the sequence
         if (player->left) {
             velocityX = player->onGround ? -player->walkSpeed : -player->airSpeed;
-            // Or flip the sprite
+            // Flip the sprite
             if (auto* animation = registry_.get<components::Animation>(entity)) {
-                animation->frameStartIndex = 4;
+                if (auto* sprite = registry_.get<components::Sprite>(entity)) {
+                    sprite->flipMode = components::Sprite::FlipMode::HORIZONTAL;
+                }
                 animation->playing = true;
             }
         } else if (player->right) {
             velocityX = player->onGround ? player->walkSpeed : player->airSpeed;
             if (auto* animation = registry_.get<components::Animation>(entity)) {
-                animation->frameStartIndex = 8;
+                if (auto* sprite = registry_.get<components::Sprite>(entity)) {
+                    sprite->flipMode = components::Sprite::FlipMode::NONE;
+                }
                 animation->playing = true;
             }
         } else {
             if (auto* animation = registry_.get<components::Animation>(entity)) {
-                // animation->frameStartIndex = 2;
+                if (auto* sprite = registry_.get<components::Sprite>(entity)) {
+                    sprite->frameIndex = 1;
+                }
                 animation->playing = false;
             }
         }
