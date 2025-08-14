@@ -36,6 +36,10 @@ public:
     virtual void onEntityAdded(Entity entity) {}
     // Called when an entity is removed from the system
     virtual void onEntityRemoved(Entity entity) {}
+    // Called when an optional component is added to an entity
+    virtual void onOptionalComponentAdded(Entity entity) {}
+    // Called when an optional component is removed from an entity
+    virtual void onOptionalComponentRemoved(Entity entity) {}
 
     void addEntity(Entity entity) {
         entities_.push_back(entity);

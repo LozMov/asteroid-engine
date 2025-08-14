@@ -2,10 +2,9 @@
 
 #include "Component.hpp"
 #include "SystemBase.hpp"
+#include "Registry.hpp"
 
 namespace ast {
-
-class Registry;
 
 template <typename... Components>
 class System : public SystemBase {

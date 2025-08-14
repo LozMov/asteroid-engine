@@ -50,6 +50,13 @@ public:
         return NULL_ENTITY;  // Return a null entity if not found
     }
 
+    // Get all components of a type
+    template <typename T>
+    const auto& getAll() {
+        static_assert(std::is_base_of_v<Component, T>, "T must be a Component type");
+        return componentStorages_[Component::getTypeId<T>()];
+    }
+
     Entity createEntity() {
         Entity entity = nextEntityId_++;
         entitySignatures_.emplace(entity, Signature{});
@@ -84,11 +91,16 @@ public:
 
     // Insert a component
     template <typename T>
-    T& insert(Entity entity, T component) {
+    T& insert(Entity entity, T component, bool notify = true) {
         static_assert(std::is_base_of_v<Component, T>, "T must be a Component type");
         auto& storage = componentStorages_[Component::getTypeId<T>()];
         storage[entity] = std::make_unique<T>(std::move(component));
-        onComponentAdded<T>(entity);
+        if (notify) {
+            onComponentAdded<T>(entity);
+        } else {
+            // Update the entity signature without notifying systems
+            entitySignatures_[entity].set(Component::getTypeId<T>());
+        }
         return static_cast<T&>(*storage[entity]);
     }
 
@@ -103,17 +115,26 @@ public:
     }
 
     template <typename T>
-    void copy(Entity entity, Entity other) {
+    void copy(Entity entity, Entity other, bool notify = true) {
         static_assert(std::is_base_of_v<Component, T>, "T must be a Component type");
         // Copy construct the component from the other entity
         if (T* otherComponent = get<T>(other)) {
-            emplace<T>(entity, *otherComponent);
+            insert<T>(entity, *otherComponent, notify);
         }
     }
 
     template <typename... Ts>
-    void copyAll(Entity entity, Entity other) {
-        (copy<Ts>(entity, other), ...);
+    void copyAll(Entity entity, Entity other, bool notify = true) {
+        (copy<Ts>(entity, other, notify), ...);
+    }
+    
+    // Add an entity to all systems that match its signature
+    void forceCheck(Entity entity) {
+        for (auto& system : systems_) {
+            if ((system->getSignature() & entitySignatures_[entity]) == system->getSignature()) {
+                system->addEntity(entity);
+            }
+        }
     }
 
     template <typename T, typename... Args>
@@ -235,6 +256,9 @@ private:
                     system->getSignature()) {
                     system->addEntity(entity);
                 }
+            } else {
+                // The entity already matched the system's signature
+                system->onOptionalComponentAdded(entity);
             }
         }
     }
@@ -255,6 +279,9 @@ private:
                 if ((system->getSignature() & entitySignatures_[entity]) !=
                     system->getSignature()) {
                     system->removeEntity(entity);
+                } else {
+                    // The entity still matches the system's signature
+                    system->onOptionalComponentRemoved(entity);
                 }
             }
         }
