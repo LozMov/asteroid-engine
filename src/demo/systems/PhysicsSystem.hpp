@@ -25,6 +25,7 @@ struct PhysicsCommand {
         SET_ANGULAR_VELOCITY,
         SET_POSITION,
         SET_ROTATION,
+        TELEPORT
     } type;
     ast::Vector2 vector;
     float scalar = 1.0f;

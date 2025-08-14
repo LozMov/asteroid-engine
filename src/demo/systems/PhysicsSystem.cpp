@@ -38,6 +38,7 @@ PhysicsSystem::PhysicsSystem(ast::Registry& registry, const ast::Vector2& gravit
     worldDef.gravity = {gravity.x, gravity.y};
     worldDef.userData = this;
     world_ = b2CreateWorld(&worldDef);
+    SDL_assert(b2World_IsValid(world_));
     b2World_SetPreSolveCallback(world_, preSolveOneSidedPlatform, nullptr);
 }
 
@@ -46,7 +47,6 @@ PhysicsSystem::~PhysicsSystem() {
     if (b2World_IsValid(world_)) {
         b2DestroyWorld(world_);
     }
-    world_ = {};
 }
 
 void PhysicsSystem::update(float dt) {
@@ -89,8 +89,8 @@ void PhysicsSystem::update(float dt) {
                     registry_.markAsExpired(enemyEntity);
                     ast::EventBus::publish(
                         PhysicsCommand{entity,
-                                       PhysicsCommand::Type::APPLY_LINEAR_IMPULSE,
-                                       {0.0f, player->jumpImpulse * -0.3f}});
+                                       PhysicsCommand::Type::SET_LINEAR_VELOCITY_Y,
+                                       {0.0f, player->jumpImpulse * -0.5f}});
                 } else {
                     ++player->groundContactCount;
                     AST_DEBUG("Player on ground, contact count: {}", player->groundContactCount);
@@ -162,10 +162,11 @@ void PhysicsSystem::onEntityAdded(Entity entity) {
     bodyDef.angularDamping = rigidBody->angularDamping;
     bodyDef.gravityScale = rigidBody->gravityScale;
     bodyDef.name = rigidBody->name.c_str();
+    bodyDef.userData = reinterpret_cast<void*>(entity);
     AST_INFO("Creating physics body for entity {}: name={}, pos=({}, {}), type={}", entity,
              bodyDef.name, physicsPos.x, physicsPos.y, static_cast<int>(rigidBody->bodyType));
-    bodyDef.userData = reinterpret_cast<void*>(entity);
     rigidBody->handle = b2CreateBody(world_, &bodyDef);
+    SDL_assert(b2Body_IsValid(rigidBody->handle));
 
     float halfWidth = rigidBody->size.x * 0.5f * transform->scale.x * METERS_PER_PIXEL;
     float halfHeight = rigidBody->size.y * 0.5f * transform->scale.y * METERS_PER_PIXEL;
@@ -212,12 +213,6 @@ void PhysicsSystem::onEntityAdded(Entity entity) {
     // A sensor is a shape that detects overlap but does not produce a response
     if (auto* player = registry_.get<Player>(entity)) {
         AST_INFO("Adding Player component sensor for entity {}", entity);
-
-        // Only add sensor if the body is valid
-        if (!b2Body_IsValid(rigidBody->handle)) {
-            AST_ERROR("Cannot add player sensor: invalid rigid body");
-            return;
-        }
         float playerSensorHalfWidth = halfWidth * 0.5f;
         float playerSensorHalfHeight = halfHeight * 0.5f;
         b2Polygon playerSensorShape =
@@ -236,7 +231,8 @@ void PhysicsSystem::onEntityAdded(Entity entity) {
     if (rigidBody && rigidBody->name == "Player") {
         AST_INFO("Player physics body setup completed for entity {}", entity);
     }
-    b2World_Step(world_, timeStep_, 4);
+    // TODO
+    // b2World_Step(world_, timeStep_, 4);
 }
 
 void PhysicsSystem::onEntityRemoved(Entity entity) {
@@ -283,6 +279,9 @@ void PhysicsSystem::applyCommand(const PhysicsCommand& event) {
         case PhysicsCommand::Type::SET_ANGULAR_VELOCITY:
             b2Body_SetAngularVelocity(rigidBody->handle, event.scalar);
             break;
+        case PhysicsCommand::Type::TELEPORT:
+            syncTransformToPhysics(event.entity);
+            break;
     }
 }
 
@@ -291,8 +290,29 @@ void PhysicsSystem::setGravity(const ast::Vector2& gravity) { b2World_SetGravity
 ast::Vector2 PhysicsSystem::getGravity() const { return b2World_GetGravity(world_); }
 
 void PhysicsSystem::syncTransformToPhysics(Entity entity) {
+    // Teleport the body to the transform position
     auto* transform = registry_.get<Transform>(entity);
     auto* rigidBody = registry_.get<RigidBody>(entity);
+    if (!transform || !rigidBody) {
+        AST_ERROR("Transform or rigid body not found for entity {}", entity);
+        return;
+    }
+    auto* sprite = registry_.get<Sprite>(entity);
+    // Calculate physics body position (center of sprite)
+    ast::Vector2 physicsPos = transform->position;
+    if (sprite) {
+        float logicalSizeX = sprite->size.x * transform->scale.x;
+        float logicalSizeY = sprite->size.y * transform->scale.y;
+        // Get to the center from any origin point
+        physicsPos.x += (0.5f - sprite->origin.x) * logicalSizeX;
+        physicsPos.y += (0.5f - sprite->origin.y) * logicalSizeY;
+    }
+    b2Body_SetTransform(rigidBody->handle, {transform->position.x * METERS_PER_PIXEL,
+                                           transform->position.y * METERS_PER_PIXEL},
+                         b2MakeRot(transform->rotation * DEG_TO_RAD));
+    b2Body_SetLinearVelocity(rigidBody->handle, {0.0f, 0.0f});
+    b2Body_SetAngularVelocity(rigidBody->handle, 0.0f);
+    AST_INFO("Synced transform to physics for entity {}", entity);
 }
 
 void PhysicsSystem::syncPhysicsToTransform(Entity entity, b2BodyId bodyId,
