@@ -17,6 +17,13 @@ public:
                                                         const std::string& fileName);
     static ast::Entity createEntityFromPrefab(ast::Registry& registry,
                                               const std::string& prefabName);
+
+    struct EntityData {
+        std::string prefab;
+        ast::Entity entity;
+    };
+
+    static std::vector<EntityData> loadLevel(ast::Registry& registry, const std::string& fileName);
 };
 
 }  // namespace astd::components
