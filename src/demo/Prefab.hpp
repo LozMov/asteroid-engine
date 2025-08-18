@@ -7,7 +7,7 @@ namespace ast {
 class Registry;
 }
 
-namespace astd::components {
+namespace astd {
 
 // Prefab can be used to define a template for creating entities
 // with predefined components and data.
@@ -26,4 +26,4 @@ public:
     static std::vector<EntityData> loadLevel(ast::Registry& registry, const std::string& fileName);
 };
 
-}  // namespace astd::components
+}  // namespace astd

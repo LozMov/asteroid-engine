@@ -25,8 +25,12 @@ public:
                     camera->position = targetPos;  // Snap to target if close enough
                 }
                 // Clamp camera position to the world bounds
-                camera->position.x = std::clamp(camera->position.x, 0.0f, worldWidth - camera->screenSize.x);
-                camera->position.y = std::clamp(camera->position.y, 0.0f, worldHeight - camera->screenSize.y);
+                if (worldWidth > 0.0f) {
+                    camera->position.x = std::clamp(camera->position.x, 0.0f, worldWidth - camera->screenSize.x);
+                }
+                if (worldHeight > 0.0f) {
+                    camera->position.y = std::clamp(camera->position.y, 0.0f, worldHeight - camera->screenSize.y);
+                }
             }
         }
     }

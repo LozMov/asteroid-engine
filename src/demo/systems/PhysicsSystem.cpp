@@ -21,9 +21,11 @@ static bool preSolveOneSidedPlatform(b2ShapeId shapeIdA, b2ShapeId shapeIdB, b2M
     b2BodyId bodyIdA = b2Shape_GetBody(shapeIdA);
     b2BodyId bodyIdB = b2Shape_GetBody(shapeIdB);
     float sign = 0.0f;
-    if (std::strcmp(b2Body_GetName(bodyIdA), "Player") == 0) {
+    const char* nameA = b2Body_GetName(bodyIdA);
+    const char* nameB = b2Body_GetName(bodyIdB);
+    if (nameA && std::strcmp(b2Body_GetName(bodyIdA), "Player") == 0) {
         sign = 1.0f;
-    } else if (std::strcmp(b2Body_GetName(bodyIdB), "Player") == 0) {
+    } else if (nameB && std::strcmp(b2Body_GetName(bodyIdB), "Player") == 0) {
         sign = -1.0f;
     } else {
         return true;  // Do nothing
@@ -79,10 +81,12 @@ void PhysicsSystem::update(float dt) {
         const b2SensorBeginTouchEvent& beginEvent = sensorEvents.beginEvents[i];
         auto bodyA = b2Shape_GetBody(beginEvent.sensorShapeId);
         auto bodyB = b2Shape_GetBody(beginEvent.visitorShapeId);
-        if (std::strcmp(b2Body_GetName(bodyA), "Player") == 0) {
+        const char* nameA = b2Body_GetName(bodyA);
+        if (nameA && std::strcmp(nameA, "Player") == 0) {
             auto entity = reinterpret_cast<ast::Entity>(b2Body_GetUserData(bodyA));
             if (auto* player = registry_.get<Player>(entity)) {
-                if (std::strstr(b2Body_GetName(bodyB), "Enemy")) {
+                const char* nameB = b2Body_GetName(bodyB);
+                if (nameB && std::strstr(nameB, "Enemy")) {
                     AST_DEBUG("Land on an enemy");
                     // TODO: kill the enemy
                     auto enemyEntity = reinterpret_cast<ast::Entity>(b2Body_GetUserData(bodyB));
@@ -110,7 +114,8 @@ void PhysicsSystem::update(float dt) {
             AST_WARN("Invalid body in sensor end event");
             continue;
         }
-        if (std::strcmp(b2Body_GetName(bodyA), "Player") == 0) {
+        const char* nameA = b2Body_GetName(bodyA);
+        if (nameA && std::strcmp(nameA, "Player") == 0) {
             auto entity = reinterpret_cast<ast::Entity>(b2Body_GetUserData(bodyA));
             if (auto* player = registry_.get<Player>(entity)) {
                 player->groundContactCount = std::max(0, player->groundContactCount - 1);
@@ -206,7 +211,6 @@ void PhysicsSystem::onEntityAdded(Entity entity) {
                  physicsPos.x * METERS_PER_PIXEL, physicsPos.y * METERS_PER_PIXEL);
         shapeDef.enablePreSolveEvents = true;
     }
-    shapeDef.filter.maskBits = static_cast<uint16_t>(rigidBody->collisionCategory);
     b2CreatePolygonShape(rigidBody->handle, &shapeDef, &polygon);
 
     // Add player sensor
@@ -307,9 +311,9 @@ void PhysicsSystem::syncTransformToPhysics(Entity entity) {
         physicsPos.x += (0.5f - sprite->origin.x) * logicalSizeX;
         physicsPos.y += (0.5f - sprite->origin.y) * logicalSizeY;
     }
-    b2Body_SetTransform(rigidBody->handle, {transform->position.x * METERS_PER_PIXEL,
-                                           transform->position.y * METERS_PER_PIXEL},
-                         b2MakeRot(transform->rotation * DEG_TO_RAD));
+    b2Body_SetTransform(rigidBody->handle,
+                        {physicsPos.x * METERS_PER_PIXEL, physicsPos.y * METERS_PER_PIXEL},
+                        b2MakeRot(transform->rotation * DEG_TO_RAD));
     b2Body_SetLinearVelocity(rigidBody->handle, {0.0f, 0.0f});
     b2Body_SetAngularVelocity(rigidBody->handle, 0.0f);
     AST_INFO("Synced transform to physics for entity {}", entity);

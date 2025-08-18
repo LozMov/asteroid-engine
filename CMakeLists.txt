@@ -51,7 +51,7 @@ file(GLOB_RECURSE ENGINE_SOURCES CONFIGURE_DEPENDS
 
 add_library(asteroid_engine ${ENGINE_SOURCES})
 
-target_link_libraries(asteroid_engine PRIVATE 
+target_link_libraries(asteroid_engine PUBLIC 
     SDL3::SDL3
     SDL3_image::SDL3_image
     SDL3_ttf::SDL3_ttf

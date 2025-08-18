@@ -20,7 +20,7 @@ void RenderSystem::update(float dt) {
             continue;
         }
 
-        if (!camera_) {
+        if (!camera_ || !camera_->target) {
             for (const auto& [_, cameraPtr] : registry_.getAll<Camera>()) {
                 camera_ = static_cast<Camera*>(cameraPtr.get());
                 camera_->target = playerEntity_;
@@ -86,9 +86,8 @@ void RenderSystem::update(float dt) {
                                        &dstRect);
                 break;
         }
-
-        SDL_SetRenderDrawColor(renderer_, 255, 0, 0, 255);
-        SDL_RenderRect(renderer_, &dstRect);
+        // SDL_SetRenderDrawColor(renderer_, 255, 0, 0, 255);
+        // SDL_RenderRect(renderer_, &dstRect);
     }
 }
 

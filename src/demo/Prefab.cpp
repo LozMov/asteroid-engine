@@ -7,12 +7,11 @@
 #include "engine/Audio.hpp"
 #include "engine/Cache.hpp"
 #include "engine/Color.hpp"
-#include "engine/Log.hpp"
 #include "engine/Vector2.hpp"
 #include "engine/ecs/Registry.hpp"
 
 #include "components/Components.hpp"
-#include "systems/PhysicsSystem.hpp"
+#include "systems/Systems.hpp"
 
 #define GET_PROPERTY(data, comp, prop) \
     if (data.contains(#prop)) (comp).prop = data[#prop].get<decltype((comp).prop)>()
@@ -134,6 +133,19 @@ void from_json(const nlohmann::json& j, Sprite::FlipMode& flipMode) {
     }
 }
 
+void from_json(const nlohmann::json& j, UI::Type& type) {
+    std::string str = j.get<std::string>();
+    if (str == "TEXT") {
+        type = UI::Type::TEXT;
+    } else if (str == "ICON") {
+        type = UI::Type::ICON;
+    } else if (str == "INDICATOR") {
+        type = UI::Type::INDICATOR;
+    } else {
+        type = UI::Type::TEXT;
+    }
+}
+
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(Camera, target, position, screenSize, lerp, zoom)
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(Animation, frameCount, frameStartIndex,
                                                 frameDuration, loop, playing)
@@ -144,7 +156,15 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(RigidBody, bodyType, collisionCa
                                                 angularDamping, fixedRotation, isEnabled, isBullet)
 NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(Player, walkSpeed, runSpeed, airSpeed, jumpImpulse,
                                                 jumpBufferDuration, coyoteDuration)
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(Enemy, patrolSpeed, patrolDistance, spawnPosition, currentDirection, patrolTimer, isPatrolling)
+NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE_WITH_DEFAULT(UI, type, text, position, size, color, value, visible)
 
+}  // namespace astd::components
+
+namespace astd {
+
+using namespace components;
+using namespace systems;
 using nlohmann::json;
 
 // TODO
@@ -214,9 +234,15 @@ std::vector<std::string> Prefab::loadPrefabsFromFile(ast::Registry& registry,
             } else if (compName == "Player") {
                 auto player = compData.get<Player>();
                 registry.insert(prefabName, player);
+            } else if (compName == "Enemy") {
+                auto enemy = compData.get<Enemy>();
+                registry.insert(prefabName, enemy);
             } else if (compName == "Camera") {
                 auto camera = compData.get<Camera>();
                 registry.insert(prefabName, camera);
+            } else if (compName == "UI") {
+                auto ui = compData.get<UI>();
+                registry.insert(prefabName, ui);
             } else {
                 AST_WARN("Unknown component type: {}", compName);
             }
@@ -230,7 +256,7 @@ std::vector<std::string> Prefab::loadPrefabsFromFile(ast::Registry& registry,
 ast::Entity Prefab::createEntityFromPrefab(ast::Registry& registry, const std::string& prefabName) {
     auto entity = registry.createEntity();
     auto prefab = registry.get(prefabName);
-    registry.copyAll<Animation, Sprite, Transform, RigidBody, Player, Camera>(entity, prefab,
+    registry.copyAll<Animation, Sprite, Transform, RigidBody, Player, Enemy, Camera, UI>(entity, prefab,
                                                                               false);
     registry.forceCheck(entity);
     return entity;
@@ -253,17 +279,39 @@ std::vector<Prefab::EntityData> Prefab::loadLevel(ast::Registry& registry,
     if (levelData.contains("properties")) {
         auto& props = levelData["properties"];
         // Handle level-wide properties like gravity, background color, etc.
+        if (props.contains("worldSize")) {
+            if (auto* cameraSystem = registry.get<CameraSystem>()) {
+                cameraSystem->worldWidth = props["worldSize"]["x"];
+                cameraSystem->worldHeight = props["worldSize"]["y"];
+            }
+        }
         if (props.contains("gravity")) {
-            if (auto* physicsSystem = registry.get<systems::PhysicsSystem>()) {
+            if (auto* physicsSystem = registry.get<PhysicsSystem>()) {
                 physicsSystem->setGravity(props["gravity"].get<ast::Vector2>());
             }
         }
         if (props.contains("backgroundMusic")) {
             std::string fileName = props["backgroundMusic"].value("fileName", "background.wav");
             int loops = props["backgroundMusic"].value("loops", 0);
-            float gain = props["backgroundMusic"].value("gain", 1.0f);  
+            float gain = props["backgroundMusic"].value("gain", 1.0f);
             ast::Audio::getInstance().playSound(fileName, loops);
             ast::Audio::getInstance().setSoundGain(fileName, gain);
+        }
+        if (props.contains("platformSpawner")) {
+            if (auto* platformSpawner = registry.get<PlatformSpawnerSystem>()) {
+                const auto& propsData = props["platformSpawner"];
+                GET_PROPERTY(propsData, *platformSpawner, spawnDistance);
+                GET_PROPERTY(propsData, *platformSpawner, minPlatformWidth);
+                GET_PROPERTY(propsData, *platformSpawner, maxPlatformWidth);
+                GET_PROPERTY(propsData, *platformSpawner, minPlatformHeight);
+                GET_PROPERTY(propsData, *platformSpawner, maxPlatformHeight);
+                GET_PROPERTY(propsData, *platformSpawner, minSpawnY);
+                GET_PROPERTY(propsData, *platformSpawner, maxSpawnY);
+                GET_PROPERTY(propsData, *platformSpawner, minPlatformSpacing);
+                GET_PROPERTY(propsData, *platformSpawner, maxPlatformSpacing);
+                GET_PROPERTY(propsData, *platformSpawner, shouldSpawnEnemy);
+                GET_PROPERTY(propsData, *platformSpawner, enemySpawnChance);
+            }
         }
     }
 
@@ -277,8 +325,8 @@ std::vector<Prefab::EntityData> Prefab::loadLevel(ast::Registry& registry,
         std::string prefabName = entityData["prefab"];
         auto entity = registry.createEntity();
         auto prefab = registry.get(prefabName);
-        registry.copyAll<Animation, Sprite, Transform, RigidBody, Player, Camera>(entity, prefab,
-                                                                              false);
+        registry.copyAll<Animation, Sprite, Transform, RigidBody, Player, Enemy, Camera, UI>(entity, prefab,
+                                                                                  false);
 
         // Override properties if specified
         if (entityData.contains("overrides")) {
@@ -307,7 +355,7 @@ std::vector<Prefab::EntityData> Prefab::loadLevel(ast::Registry& registry,
             }
 
             if (overrides.contains("Sprite")) {
-                // Cannot change sprite constructors 
+                // Cannot change sprite constructors
                 if (auto* sprite = registry.get<Sprite>(entity)) {
                     const auto& sData = overrides["Sprite"];
                     GET_PROPERTY(sData, *sprite, size);
@@ -322,10 +370,11 @@ std::vector<Prefab::EntityData> Prefab::loadLevel(ast::Registry& registry,
                     GET_PROPERTY(sData, *sprite, visible);
                     GET_PROPERTY(sData, *sprite, frameCountX);
                     GET_PROPERTY(sData, *sprite, frameCountY);
-                    
+
                     // Special case for fileName
                     if (sData.contains("fileName")) {
-                        sprite->texture = ast::Cache::getTexture(sData["fileName"].get<std::string>());
+                        sprite->texture =
+                            ast::Cache::getTexture(sData["fileName"].get<std::string>());
                     }
                 }
             }
@@ -364,6 +413,20 @@ std::vector<Prefab::EntityData> Prefab::loadLevel(ast::Registry& registry,
                     GET_PROPERTY(pData, *player, coyoteDuration);
                 }
             }
+
+            if (overrides.contains("UI")) {
+                auto* ui = registry.get<UI>(entity);
+                if (ui) {
+                    const auto& uData = overrides["UI"];
+                    GET_PROPERTY(uData, *ui, type);
+                    GET_PROPERTY(uData, *ui, text);
+                    GET_PROPERTY(uData, *ui, position);
+                    GET_PROPERTY(uData, *ui, size);
+                    GET_PROPERTY(uData, *ui, color);
+                    GET_PROPERTY(uData, *ui, value);
+                    GET_PROPERTY(uData, *ui, visible);
+                }
+            }
         }
 
         // Check after overrides to ensure all components are valid
@@ -373,7 +436,8 @@ std::vector<Prefab::EntityData> Prefab::loadLevel(ast::Registry& registry,
     }
 
     AST_INFO("Level loaded with {} entities", entities.size());
+
     return entities;
 }
 
-}  // namespace astd::components
+}  // namespace astd
