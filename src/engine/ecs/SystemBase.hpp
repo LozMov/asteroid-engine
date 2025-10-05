@@ -55,6 +55,8 @@ public:
         }
     }
 
+    std::vector<Entity>& getEntities() { return entities_; }
+
     const std::vector<Entity>& getEntities() const { return entities_; }
 
     Registry& getRegistry() const { return registry_; }
