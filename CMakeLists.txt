@@ -2,8 +2,8 @@ cmake_minimum_required(VERSION 3.28)
 project(asteroid_engine)
 
 option(BUILD_DEMO "Build the demo" ON)
-option(BUILD_TESTS "Build the tests" OFF)
 option(USE_IMPORTED_LIBS "Use prebuilt libraries" OFF)
+option(BUILD_BENCHMARK "Build benchmark" OFF)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -69,20 +69,13 @@ if (BUILD_DEMO)
     add_subdirectory(src/demo)
 endif()
 
-if(BUILD_TESTS)
-    find_package(GTest REQUIRED)
-    file(GLOB TEST_SOURCES "src/test/test_*.cpp" "src/test/*Test.cpp")
-    # Create individual test executables
-    foreach(TEST_SOURCE ${TEST_SOURCES})
-        get_filename_component(TEST_NAME ${TEST_SOURCE} NAME_WE)
-        add_executable(${TEST_NAME} ${TEST_SOURCE})
-        target_link_libraries(${TEST_NAME} PRIVATE 
-            asteroid_engine
-            GTest::GTest 
-            GTest::Main)
-        target_include_directories(${TEST_NAME} PRIVATE src)
-        add_test(NAME ${TEST_NAME} COMMAND ${TEST_NAME})
-    endforeach()
-    enable_testing()
-    add_subdirectory(src/test)
+# Only enable tests if this is the top-level project
+if (CMAKE_PROJECT_NAME STREQUAL PROJECT_NAME) 
+    include(CTest)
+    if (BUILD_TESTING)
+        add_subdirectory(test)
+    endif()
+    if (BUILD_BENCHMARK)
+        add_subdirectory(benchmark)
+    endif()
 endif()
