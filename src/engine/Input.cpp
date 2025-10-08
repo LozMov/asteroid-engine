@@ -17,8 +17,8 @@ bool Input::isKeyPressed(Keycode c) {
 bool Input::hasMouse() { return SDL_HasMouse(); }
 
 bool Input::isMouseButtonPressed(MouseButton b) {
-    Uint32 state = SDL_GetMouseState(nullptr, nullptr);
-    return state & static_cast<Uint32>(b);
+    SDL_MouseButtonFlags state = SDL_GetMouseState(nullptr, nullptr);
+    return state & static_cast<SDL_MouseButtonFlags>(b);
 }
 
 Vector2 Input::getMousePosition() {

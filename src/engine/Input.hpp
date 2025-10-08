@@ -71,11 +71,22 @@ public:
     enum class Keycode {};
 
     enum class MouseButton {
-        Left = 1,
-        Middle = 2,
-        Right = 4,
+        LEFT = 1,
+        MIDDLE = 2,
+        RIGHT = 4,
         X1 = 8,
         X2 = 16
+    };
+
+    struct KeyEvent {
+        Scancode scancode;
+        bool repeat;
+        bool isKeyDown;
+    };
+
+    struct MouseButtonEvent {
+        MouseButton button;
+        Vector2 position;
     };
 
     static bool hasKeyboard();

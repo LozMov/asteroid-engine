@@ -4,7 +4,9 @@
 
 #include "Audio.hpp"
 #include "Cache.hpp"
+#include "Input.hpp"
 #include "events/EventBus.hpp"
+#include "events/Event.hpp"
 
 namespace ast {
 
@@ -37,9 +39,6 @@ bool ast::Engine::init() {
         return false;
     }
 
-    Audio::getInstance().init();
-    Audio::getInstance().setAssetsDirectory(assetsDirectory_ + "/sounds");
-
     AST_INFO("Creating window...");
     window_ = SDL_CreateWindow(title_.c_str(), width_, height_, SDL_WINDOW_RESIZABLE);
     if (!window_) {
@@ -59,6 +58,15 @@ bool ast::Engine::init() {
     // SDL_SetDefaultTextureScaleMode(renderer, SDL_SCALEMODE_PIXELART);
     SDL_SetRenderLogicalPresentation(renderer_, width_, height_,
                                      SDL_LOGICAL_PRESENTATION_LETTERBOX);
+
+    AST_INFO("Assets Directory: {}", assetsDirectory_);
+    // Initialize texture cache
+    ast::Cache::init(renderer_);
+    ast::Cache::setAssetsDirectory(assetsDirectory_ + "/images");
+
+    Audio::getInstance().init();
+    Audio::getInstance().setAssetsDirectory(assetsDirectory_ + "/sounds");
+
     running_ = true;
     AST_INFO("Initialization complete!");
 
@@ -85,17 +93,18 @@ void ast::Engine::handleEvents() {
                 quit();
                 break;
             case SDL_EVENT_KEY_DOWN:
-                EventBus::publish<events::KeyEvent>(event.key.key, event.key.repeat);
+            case SDL_EVENT_KEY_UP:
+                EventBus::publish(Input::KeyEvent{static_cast<Input::Scancode>(event.key.scancode),
+                                                  event.key.repeat, event.key.down});
                 break;
             case SDL_EVENT_WINDOW_RESIZED:
                 width_ = event.window.data1;
                 height_ = event.window.data2;
-                EventBus::publish<events::WindowResizeEvent>(width_, height_);
+                EventBus::publish(events::WindowResizeEvent{width_, height_});
                 break;
         }
     }
 }
-
 
 void ast::Engine::quit() { running_ = false; }
 

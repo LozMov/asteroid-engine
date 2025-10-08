@@ -10,9 +10,9 @@ public:
     explicit Timer(int targetFps = 60);
     void startFrame();
     void endFrame();
-    int getTargetFPS() const { return targetFps_; }
-    void setTargetFPS(int targetFps) { targetFps_ = targetFps; }
-    double getFPS() const { return averageFps_; }
+    int getTargetFps() const { return targetFps_; }
+    void setTargetFps(int targetFps) { targetFps_ = targetFps; }
+    double getFps() const { return averageFps_; }
     double getDeltaTime() const;
     void reset();
 
