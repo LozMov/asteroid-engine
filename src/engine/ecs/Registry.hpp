@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <memory>
 #include <type_traits>
 #include <unordered_map>
@@ -15,16 +16,19 @@ namespace ast {
 
 class Registry {
 public:
+    constexpr static unsigned MAX_ENTITIES = 2000;
+    constexpr static unsigned MAX_COMPONENT_TYPES = 64;
+    constexpr static unsigned MAX_SYSTEM_TYPES = 64;
+
     // Get a component
     template <typename T>
     T* get(Entity entity) {
         static_assert(std::is_base_of_v<Component, T>, "T must be a Component type");
-        auto storage = componentStorages_.find(Component::getTypeId<T>());
-        if (storage != componentStorages_.end()) {
-            auto it = storage->second.find(entity);
-            if (it != storage->second.end()) {
-                return static_cast<T*>(it->second.get());
-            }
+        // auto storage = componentStorages_.find(Component::getTypeId<T>());
+        auto& storage = componentStorages_[Component::getTypeId<T>()];
+        auto it = storage.find(entity);
+        if (it != storage.end()) {
+            return static_cast<T*>(it->second.get());
         }
         return nullptr;
     }
@@ -127,7 +131,7 @@ public:
     void copyAll(Entity entity, Entity other, bool notify = true) {
         (copy<Ts>(entity, other, notify), ...);
     }
-    
+
     // Add an entity to all systems that match its signature
     void forceCheck(Entity entity) {
         for (auto& system : systems_) {
@@ -162,19 +166,17 @@ public:
         entitySignatures_.erase(entity);
         // Remove the components after notifying systems, so they can access
         // the components in onEntityRemoved()
-        for (auto& pair : componentStorages_) {
-            pair.second.erase(entity);
+        for (auto& storage : componentStorages_) {
+            storage.erase(entity);
         }
     }
 
     template <typename T>
     void erase(Entity entity) {
         static_assert(std::is_base_of_v<Component, T>, "T must be a Component type");
-        auto storage = componentStorages_.find(Component::getTypeId<T>());
-        if (storage != componentStorages_.end()) {
-            onComponentRemoved<T>(entity);
-            storage->second.erase(entity);
-        }
+        auto& storage = componentStorages_[Component::getTypeId<T>()];
+        onComponentRemoved<T>(entity);
+        storage.erase(entity);
     }
 
     template <typename T>
@@ -192,8 +194,9 @@ public:
     // Remove all components associated with the entity
     void eraseComponents(Entity entity) {
         onComponentRemoved(entity);
-        for (auto& pair : componentStorages_) {
-            pair.second.erase(entity);
+        // TODO
+        for (auto& storage : componentStorages_) {
+            storage.erase(entity);
         }
     }
 
@@ -301,7 +304,9 @@ private:
     std::vector<Entity> expiredEntities_;
     std::unordered_map<std::string, Entity> prefabEntities_;
     std::unordered_map<Entity, Signature> entitySignatures_;
-    std::unordered_map<Component::TypeId, std::unordered_map<Entity, std::unique_ptr<Component>>>
+    // std::unordered_map<Component::TypeId, std::unordered_map<Entity, std::unique_ptr<Component>>>
+    //     componentStorages_;
+    std::array<std::unordered_map<Entity, std::unique_ptr<Component>>, MAX_COMPONENT_TYPES>
         componentStorages_;
     std::vector<std::unique_ptr<SystemBase>> systems_;
     Entity nextEntityId_ = 1;  // NULL_ENTITY is 0
