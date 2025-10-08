@@ -11,8 +11,8 @@ namespace ast {
 
 class EventBus {
 public:
-    using SubscriptionId = std::size_t;
-    using EventTypeId = std::size_t;
+    using SubscriptionId = unsigned;
+    using EventTypeId = unsigned;
 
     using Handler = std::function<void(const void*)>;
 
