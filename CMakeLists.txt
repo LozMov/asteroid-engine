@@ -13,27 +13,27 @@ set(PREBUILT_LIB_DIR "${CMAKE_SOURCE_DIR}/external/lib")
 set(INCLUDE_DIR "${CMAKE_SOURCE_DIR}/external/include")
 
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")
-    set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/bin")
-    set(CMAKE_LIBRARY_OUTPUT_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/bin")
-    set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/bin/lib")
+    set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/bin")
+    set(CMAKE_LIBRARY_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/bin")
+    set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/bin/lib")
 else()
-    set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/bin/Release")
-    set(CMAKE_LIBRARY_OUTPUT_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/bin/Release")
-    set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/bin/Release/lib")
+    set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/bin/Release")
+    set(CMAKE_LIBRARY_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/bin/Release")
+    set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/bin/Release/lib")
 endif()
 
 find_package(SDL3 REQUIRED)
 find_package(SDL3_ttf REQUIRED)
 find_package(SDL3_image REQUIRED)
 find_package(box2d REQUIRED)
-
-include(FetchContent)
-FetchContent_Declare(
-    json
-    URL https://github.com/nlohmann/json/releases/download/v3.11.3/json.tar.xz
-    DOWNLOAD_EXTRACT_TIMESTAMP ON
-)
-FetchContent_MakeAvailable(json)
+find_package(nlohmann_json REQUIRED)
+# include(FetchContent)
+# FetchContent_Declare(
+#     json
+#     URL https://github.com/nlohmann/json/releases/download/v3.11.3/json.tar.xz
+#     DOWNLOAD_EXTRACT_TIMESTAMP ON
+# )
+# FetchContent_MakeAvailable(json)
 
 add_library(minimp3 INTERFACE)
 target_include_directories(minimp3 INTERFACE "${INCLUDE_DIR}/minimp3")

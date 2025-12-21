@@ -3,7 +3,7 @@
 
 assets/
 bin/
-build/
+build*/
 docs/
 external/
 
