@@ -6,7 +6,7 @@ namespace ast {
 
 class Component {
 public:
-    using TypeId = std::size_t;
+    using TypeId = unsigned;
 
     virtual ~Component() = default;
 

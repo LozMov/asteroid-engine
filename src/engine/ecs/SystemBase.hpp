@@ -14,7 +14,7 @@ using Signature = std::bitset<64>;
 
 class SystemBase {
 public:
-    using TypeId = std::size_t;
+    using TypeId = unsigned;
 
     SystemBase(Registry& registry) : registry_(registry) {}
     virtual ~SystemBase() = default;
