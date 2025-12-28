@@ -1,6 +1,7 @@
 #pragma once
 
 #include <array>
+#include <functional>
 #include <memory>
 #include <type_traits>
 #include <unordered_map>
@@ -22,12 +23,10 @@ public:
 
     // Get a component
     template <typename T>
-    T* get(Entity entity) {
+    T* get(Entity entity) const {
         static_assert(std::is_base_of_v<Component, T>, "T must be a Component type");
-        // auto storage = componentStorages_.find(Component::getTypeId<T>());
         auto& storage = componentStorages_[Component::getTypeId<T>()];
-        auto it = storage.find(entity);
-        if (it != storage.end()) {
+        if (auto it = storage.find(entity); it != storage.end()) {
             return static_cast<T*>(it->second.get());
         }
         return nullptr;
@@ -35,7 +34,7 @@ public:
 
     // Get a system
     template <typename T>
-    T* get() {
+    T* get() const {
         static_assert(std::is_base_of_v<SystemBase, T>, "T must be a System type");
         for (auto& system : systems_) {
             if (auto* systemPtr = dynamic_cast<T*>(system.get())) {
@@ -46,17 +45,16 @@ public:
     }
 
     // Get a prefab
-    Entity get(const std::string& name) {
-        auto it = prefabEntities_.find(name);
-        if (it != prefabEntities_.end()) {
+    Entity get(const std::string& name) const {
+        if (auto it = prefabEntities_.find(name); it != prefabEntities_.end()) {
             return it->second;
         }
-        return NULL_ENTITY;  // Return a null entity if not found
+        return NULL_ENTITY;
     }
 
     // Get all components of a type
     template <typename T>
-    const auto& getAll() {
+    const auto& getAll() const {
         static_assert(std::is_base_of_v<Component, T>, "T must be a Component type");
         return componentStorages_[Component::getTypeId<T>()];
     }
@@ -73,13 +71,15 @@ public:
         return entity;
     }
 
+    void defer(std::function<void()>&& func) { deferredCommands_.push_back(std::move(func)); }
+
     // Construct a component
     template <typename T, typename... Args>
     T& emplace(Entity entity, Args&&... args) {
         static_assert(std::is_base_of_v<Component, T>, "T must be a Component type");
         auto& storage = componentStorages_[Component::getTypeId<T>()];
         storage[entity] = std::make_unique<T>(std::forward<Args>(args)...);
-        onComponentAdded<T>(entity);
+        defer([this, entity]() { onComponentAdded<T>(entity); });
         return static_cast<T&>(*storage[entity]);
     }
 
@@ -100,7 +100,7 @@ public:
         auto& storage = componentStorages_[Component::getTypeId<T>()];
         storage[entity] = std::make_unique<T>(std::move(component));
         if (notify) {
-            onComponentAdded<T>(entity);
+            defer([this, entity]() { onComponentAdded<T>(entity); });
         } else {
             // Update the entity signature without notifying systems
             entitySignatures_[entity].set(Component::getTypeId<T>());
@@ -162,21 +162,16 @@ public:
     }
 
     void erase(Entity entity) {
-        onComponentRemoved(entity);
-        entitySignatures_.erase(entity);
-        // Remove the components after notifying systems, so they can access
-        // the components in onEntityRemoved()
-        for (auto& storage : componentStorages_) {
-            storage.erase(entity);
-        }
+        defer([this, entity]() {
+            onComponentRemoved(entity);
+            entitySignatures_.erase(entity);
+        });
     }
 
     template <typename T>
     void erase(Entity entity) {
         static_assert(std::is_base_of_v<Component, T>, "T must be a Component type");
-        auto& storage = componentStorages_[Component::getTypeId<T>()];
-        onComponentRemoved<T>(entity);
-        storage.erase(entity);
+        defer([this, entity]() { onComponentRemoved<T>(entity); });
     }
 
     template <typename T>
@@ -193,21 +188,18 @@ public:
 
     // Remove all components associated with the entity
     void eraseComponents(Entity entity) {
-        onComponentRemoved(entity);
-        // TODO
-        for (auto& storage : componentStorages_) {
-            storage.erase(entity);
-        }
+        defer([this, entity]() { onComponentRemoved(entity); });
     }
 
+    // Check if the entity has a specific component
+    // Signature updates are deferred, so has<T> will return false in the same frame emplace<T> was
+    // called
     template <typename T>
     bool has(Entity entity) const {
         auto id = Component::getTypeId<T>();
         return entitySignatures_.at(entity).test(id);
     }
 
-    // Checks if the entity has all specified component types by verifying presence in each
-    // component storage
     template <typename... Ts>
     bool hasAll(Entity entity) const {
         return (has<Ts>(entity) && ...);
@@ -228,6 +220,12 @@ public:
             erase(entity);
         }
         expiredEntities_.clear();
+        // Execute deferred commands
+        std::vector<std::function<void()>> processingCommands;
+        std::swap(deferredCommands_, processingCommands);
+        for (const auto& cmd : processingCommands) {
+            cmd();
+        }
     }
 
     struct Context {
@@ -288,6 +286,7 @@ private:
                 }
             }
         }
+        componentStorages_[typeId].erase(entity);
     }
 
     void onComponentRemoved(Entity entity) {
@@ -299,9 +298,14 @@ private:
                 system->removeEntity(entity);
             }
         }
+        // Remove the components after notifying systems, so they can access
+        // the components in onEntityRemoved()
+        for (auto& storage : componentStorages_) {
+            storage.erase(entity);
+        }
     }
-
     std::vector<Entity> expiredEntities_;
+    std::vector<std::function<void()>> deferredCommands_;
     std::unordered_map<std::string, Entity> prefabEntities_;
     std::unordered_map<Entity, Signature> entitySignatures_;
     // std::unordered_map<Component::TypeId, std::unordered_map<Entity, std::unique_ptr<Component>>>

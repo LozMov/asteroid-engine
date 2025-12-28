@@ -59,7 +59,8 @@ public:
 
     const std::vector<Entity>& getEntities() const { return entities_; }
 
-    Registry& getRegistry() const { return registry_; }
+    Registry& getRegistry() { return registry_; }
+    const Registry& getRegistry() const { return registry_; }
 
 protected:
     std::vector<Entity> entities_;
