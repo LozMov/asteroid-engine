@@ -22,27 +22,15 @@ else()
     set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/bin/Release/lib")
 endif()
 
-find_package(SDL3 REQUIRED)
-find_package(SDL3_ttf REQUIRED)
-find_package(SDL3_image REQUIRED)
-find_package(box2d REQUIRED)
-find_package(nlohmann_json REQUIRED)
-# include(FetchContent)
-# FetchContent_Declare(
-#     json
-#     URL https://github.com/nlohmann/json/releases/download/v3.11.3/json.tar.xz
-#     DOWNLOAD_EXTRACT_TIMESTAMP ON
-# )
-# FetchContent_MakeAvailable(json)
-
+find_package(SDL3 CONFIG REQUIRED)
+find_package(SDL3_ttf CONFIG REQUIRED)
+find_package(SDL3_image CONFIG REQUIRED)
+find_package(box2d CONFIG REQUIRED)
+find_package(nlohmann_json CONFIG REQUIRED)
+find_package(spdlog CONFIG REQUIRED)
 add_library(minimp3 INTERFACE)
 target_include_directories(minimp3 INTERFACE "${INCLUDE_DIR}/minimp3")
 
-add_library(spdlog STATIC IMPORTED)
-set_target_properties(spdlog PROPERTIES
-    IMPORTED_LOCATION "${PREBUILT_LIB_DIR}/spdlog.lib"
-    INTERFACE_INCLUDE_DIRECTORIES "${INCLUDE_DIR}"
-)
 add_compile_definitions(SPDLOG_ACTIVE_LEVEL=SPDLOG_LEVEL_TRACE)
 
 file(GLOB_RECURSE ENGINE_SOURCES CONFIGURE_DEPENDS
@@ -56,8 +44,8 @@ target_link_libraries(asteroid_engine PUBLIC
     SDL3_image::SDL3_image
     SDL3_ttf::SDL3_ttf
     nlohmann_json::nlohmann_json
-    box2d
-    spdlog
+    box2d::box2d
+    spdlog::spdlog
     minimp3
 )
 

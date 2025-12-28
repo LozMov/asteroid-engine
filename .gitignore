@@ -1,5 +1,6 @@
 .vscode/
 .github/
+.cache/
 
 assets/
 bin/
@@ -10,3 +11,6 @@ external/
 /src/demo_test/
 /src/example/
 /src/test/
+
+CMakeUserPresets.json
+.clangd
