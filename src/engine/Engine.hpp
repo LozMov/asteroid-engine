@@ -1,8 +1,10 @@
 #pragma once
 
+#include <filesystem>
 #include <string>
 
 #include "Color.hpp"
+#include "Scene.hpp"
 #include "Timer.hpp"
 
 class SDL_Window;
@@ -10,23 +12,22 @@ class SDL_Renderer;
 
 namespace ast {
 
-class Engine {
+class Engine final {
 public:
-    Engine(const std::string& title, int width, int height, const std::string& assetsDir);
+    Engine(const std::string& title, int width, int height, const std::filesystem::path& assetsDir);
     ~Engine();
 
-    bool init();
+    // bool init();
     void run();
     void quit();
 
-protected:
     void handleEvents();
-    virtual void update(float dt) = 0;
+    void update(float dt);
     void clear(const Color& color);
     void present();
-    void destroy();
+    // void destroy();
 
-    std::string assetsDirectory_;
+    std::filesystem::path assetsDirectory_;
     std::string title_;
     Timer timer_;
     SDL_Window* window_;

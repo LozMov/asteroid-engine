@@ -2,15 +2,17 @@
 
 #include <SDL3_ttf/SDL_ttf.h>
 
+#include <filesystem>
+
 #include "Audio.hpp"
 #include "Cache.hpp"
 #include "Input.hpp"
-#include "events/EventBus.hpp"
 #include "events/Event.hpp"
+#include "events/EventBus.hpp"
 
 namespace ast {
 
-Engine::Engine(const std::string& title, int width, int height, const std::string& assetsDir)
+Engine::Engine(const std::string& title, int width, int height, const std::filesystem::path& assetsDir)
     : window_(nullptr),
       renderer_(nullptr),
       width_(width),
@@ -18,25 +20,21 @@ Engine::Engine(const std::string& title, int width, int height, const std::strin
       title_(title),
       running_(false),
       assetsDirectory_(assetsDir),
-      timer_(60) {}
-
-ast::Engine::~Engine() { destroy(); }
-
-bool ast::Engine::init() {
+      timer_(60) {
     spdlog::set_pattern("%^[%L][%T] %s:%#: %v%$");
     spdlog::set_level(spdlog::level::trace);
     AST_INFO("Initializing SDL...");
 
     if (!SDL_Init(SDL_INIT_VIDEO)) {
         SDL_ERROR();
-        return false;
+        return;
     }
 
     AST_INFO("Initializing TTF...");
     if (!TTF_Init()) {
         SDL_ERROR();
         SDL_Quit();
-        return false;
+        return;
     }
 
     AST_INFO("Creating window...");
@@ -44,7 +42,7 @@ bool ast::Engine::init() {
     if (!window_) {
         SDL_ERROR();
         SDL_Quit();
-        return false;
+        return;
     }
 
     AST_INFO("Creating renderer...");
@@ -53,30 +51,49 @@ bool ast::Engine::init() {
         SDL_ERROR();
         SDL_DestroyWindow(window_);
         SDL_Quit();
-        return false;
+        return;
     }
     // SDL_SetDefaultTextureScaleMode(renderer, SDL_SCALEMODE_PIXELART);
     SDL_SetRenderLogicalPresentation(renderer_, width_, height_,
                                      SDL_LOGICAL_PRESENTATION_LETTERBOX);
 
-    AST_INFO("Assets Directory: {}", assetsDirectory_);
+    AST_INFO("Assets Directory: {}", assetsDirectory_.string());
     // Initialize texture cache
     ast::Cache::init(renderer_);
-    ast::Cache::setAssetsDirectory(assetsDirectory_ + "/images");
+    ast::Cache::setAssetsDirectory(assetsDirectory_ / "images");
 
     Audio::getInstance().init();
-    Audio::getInstance().setAssetsDirectory(assetsDirectory_ + "/sounds");
+    Audio::getInstance().setAssetsDirectory(assetsDirectory_ / "sounds");
 
     running_ = true;
     AST_INFO("Initialization complete!");
-
-    return true;
 }
 
-void ast::Engine::run() {
+Engine::~Engine() {
+    Cache::clear();
+
+    TTF_Quit();
+
+    if (renderer_) {
+        SDL_DestroyRenderer(renderer_);
+        renderer_ = nullptr;
+    }
+    if (window_) {
+        SDL_DestroyWindow(window_);
+        window_ = nullptr;
+    }
+    Audio::getInstance().shutdown();
+    SDL_Quit();
+}
+
+// bool Engine::init() {
+
+// }
+
+void Engine::run() {
     while (running_) {
         timer_.startFrame();
-        clear(ast::Color::BLACK);
+        clear(Color::WHITE);
         handleEvents();
         update(timer_.getDeltaTime());
         present();
@@ -85,7 +102,7 @@ void ast::Engine::run() {
     }
 }
 
-void ast::Engine::handleEvents() {
+void Engine::handleEvents() {
     SDL_Event event;
     while (SDL_PollEvent(&event)) {
         switch (event.type) {
@@ -106,35 +123,22 @@ void ast::Engine::handleEvents() {
     }
 }
 
-void ast::Engine::quit() { running_ = false; }
+void Engine::update(float dt) {}
 
-void ast::Engine::clear(const Color& color) {
+void Engine::quit() { running_ = false; }
+
+void Engine::clear(const Color& color) {
     SDL_SetRenderDrawColor(renderer_, color.r, color.g, color.b, color.a);
     SDL_RenderClear(renderer_);
 }
 
-void ast::Engine::present() {
+void Engine::present() {
     // Present the frame to the screen
     if (!SDL_RenderPresent(renderer_)) {
         SDL_ERROR();
     }
 }
 
-void ast::Engine::destroy() {
-    Cache::clear();
-
-    TTF_Quit();
-
-    if (renderer_) {
-        SDL_DestroyRenderer(renderer_);
-        renderer_ = nullptr;
-    }
-    if (window_) {
-        SDL_DestroyWindow(window_);
-        window_ = nullptr;
-    }
-    Audio::getInstance().shutdown();
-    SDL_Quit();
-}
+// void Engine::destroy() {}
 
 }  // namespace ast

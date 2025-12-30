@@ -2,6 +2,7 @@
 
 #include <SDL3/SDL_audio.h>
 
+#include <filesystem>
 #include <string>
 #include <unordered_map>
 
@@ -17,7 +18,7 @@ public:
     bool init();
     void shutdown();
 
-    bool loadSound(const std::string& name, const std::string& filePath);
+    bool loadSound(const std::string& name, const std::filesystem::path& filePath);
     void playSound(const std::string& name, int loops = 1);
     void stopSound(const std::string& name);
 
@@ -26,7 +27,7 @@ public:
     float getSoundGain(const std::string& name) const;
     void setSoundGain(const std::string& name, float gain);
     bool isSoundPlaying(const std::string& name) const;
-    void setAssetsDirectory(const std::string& directory);
+    void setAssetsDirectory(const std::filesystem::path& directory);
 
     void update();
 
@@ -43,7 +44,7 @@ private:
 
     std::unordered_map<std::string, AudioData> sounds_;
     std::unordered_map<std::string, int> playing_;
-    std::string assetsDirectory_;
+    std::filesystem::path assetsDirectory_;
     SDL_AudioDeviceID device_ = 0;
     bool initialized_ = false;
 };

@@ -53,6 +53,9 @@ target_include_directories(asteroid_engine PUBLIC src)
 
 target_precompile_headers(asteroid_engine PRIVATE "src/engine/pch.hpp")
 
+add_executable(main src/main.cpp)
+target_link_libraries(main PRIVATE asteroid_engine)
+
 if (BUILD_DEMO)
     add_subdirectory(src/demo)
 endif()

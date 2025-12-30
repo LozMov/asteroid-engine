@@ -19,7 +19,7 @@ Texture Cache::getDummyTexture(const ast::Color& color) {
     return getInstance().getDummyTextureImpl(color);
 }
 
-void Cache::setAssetsDirectory(const std::string& directory) {
+void Cache::setAssetsDirectory(const std::filesystem::path& directory) {
     getInstance().assetsDirectory_ = directory;
 }
 
@@ -44,7 +44,7 @@ const Texture& Cache::getTextureImpl(const std::string& fileName) {
     if (it != textures_.end()) {
         return it->second;
     }
-    std::filesystem::path imagePath = std::filesystem::path(assetsDirectory_) / fileName;
+    std::filesystem::path imagePath = assetsDirectory_ / fileName;
     SDL_Texture* handle = IMG_LoadTexture(renderer_, imagePath.string().c_str());
     if (!handle) {
         SDL_ERROR();

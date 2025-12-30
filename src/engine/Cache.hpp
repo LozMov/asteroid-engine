@@ -1,5 +1,6 @@
 #pragma once
 
+#include <filesystem>
 #include <string>
 #include <unordered_map>
 
@@ -23,7 +24,7 @@ public:
     static void init(SDL_Renderer* renderer);
     static const Texture& getTexture(const std::string& fileName);
     static Texture getDummyTexture(const ast::Color& color);
-    static void setAssetsDirectory(const std::string& directory);
+    static void setAssetsDirectory(const std::filesystem::path& directory);
     static void clear();
 
     inline static Texture MISSING_TEXTURE{};
@@ -35,7 +36,7 @@ private:
     Texture getDummyTextureImpl(const ast::Color& color);
 
     std::unordered_map<std::string, Texture> textures_;
-    std::string assetsDirectory_;
+    std::filesystem::path assetsDirectory_;
     SDL_Renderer* renderer_ = nullptr;
 };
 

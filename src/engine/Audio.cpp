@@ -49,7 +49,7 @@ void Audio::shutdown() {
     initialized_ = false;
 }
 
-bool Audio::loadSound(const std::string& name, const std::string& filePath) {
+bool Audio::loadSound(const std::string& name, const std::filesystem::path& filePath) {
     if (!initialized_) {
         AST_WARN("Audio not initialized, cannot load sound '{}'", name);
         return false;
@@ -60,7 +60,7 @@ bool Audio::loadSound(const std::string& name, const std::string& filePath) {
     }
 
     AudioData data;
-    if (!SDL_LoadWAV(filePath.c_str(), &data.spec, &data.buffer, &data.length)) {
+    if (!SDL_LoadWAV(filePath.string().c_str(), &data.spec, &data.buffer, &data.length)) {
         SDL_ERROR();
         return false;
     }
@@ -80,7 +80,7 @@ bool Audio::loadSound(const std::string& name, const std::string& filePath) {
         return false;
     }
 
-    AST_INFO("Loaded sound '{}' from {} (length: {} bytes)", name, filePath, data.length);
+    AST_INFO("Loaded sound '{}' from {} (length: {} bytes)", name, filePath.string(), data.length);
     sounds_.emplace(name, std::move(data));
     return true;
 }
@@ -91,7 +91,7 @@ void Audio::playSound(const std::string& name, int loops) {
         return;
     }
     if (sounds_.find(name) == sounds_.end()) {
-        if (!loadSound(name, assetsDirectory_ + "/" + name)) {
+        if (!loadSound(name, assetsDirectory_ / name)) {
             return;
         }
     }
@@ -155,7 +155,7 @@ bool Audio::isSoundPlaying(const std::string& name) const {
     return playing_.find(name) != playing_.end();
 }
 
-void Audio::setAssetsDirectory(const std::string& directory) {
+void Audio::setAssetsDirectory(const std::filesystem::path& directory) {
     assetsDirectory_ = directory;
 }
 
