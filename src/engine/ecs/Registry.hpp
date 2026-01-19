@@ -9,6 +9,7 @@
 
 #include "Component.hpp"
 #include "Entity.hpp"
+#include "SparseSet.hpp"
 #include "SystemBase.hpp"
 
 class SDL_Renderer;
@@ -17,22 +18,28 @@ namespace ast {
 
 class Registry {
 public:
-    constexpr static unsigned MAX_ENTITIES = 2000;
-    constexpr static unsigned MAX_COMPONENT_TYPES = 64;
-    constexpr static unsigned MAX_SYSTEM_TYPES = 64;
+    using IComponentPool = ISparseSet;
 
-    // Get a component
+    template <typename T>
+    using ComponentPool = SparseSet<T>;
+
+    /// Get a component pointer (nullptr if entity doesn't have the component)
     template <typename T>
     T* get(Entity entity) const {
-        static_assert(std::is_base_of_v<Component, T>, "T must be a Component type");
-        auto& storage = componentStorages_[Component::getTypeId<T>()];
-        if (auto it = storage.find(entity); it != storage.end()) {
-            return static_cast<T*>(it->second.get());
+        auto* pool = getPool<T>();
+        if (!pool) {
+            return nullptr;
         }
-        return nullptr;
+        return const_cast<T*>(pool->get(entity));
     }
 
-    // Get a system
+    /// Get a component reference (asserts if entity doesn't have the component)
+    template <typename T>
+    T& getUnchecked(Entity entity) {
+        return getOrCreatePool<T>().getUnchecked(entity);
+    }
+
+    /// Get a system by type
     template <typename T>
     T* get() const {
         static_assert(std::is_base_of_v<SystemBase, T>, "T must be a System type");
@@ -44,7 +51,7 @@ public:
         return nullptr;
     }
 
-    // Get a prefab
+    /// Get a prefab entity by name
     Entity get(const std::string& name) const {
         if (auto it = prefabEntities_.find(name); it != prefabEntities_.end()) {
             return it->second;
@@ -52,12 +59,41 @@ public:
         return NULL_ENTITY;
     }
 
-    // Get all components of a type
+    /// Get the component pool for a type
     template <typename T>
-    const auto& getAll() const {
-        static_assert(std::is_base_of_v<Component, T>, "T must be a Component type");
-        return componentStorages_[Component::getTypeId<T>()];
+    ComponentPool<T>* getPool() {
+        auto typeId = Component::getTypeId<T>();
+        if (typeId >= componentPools_.size() || !componentPools_[typeId]) {
+            return nullptr;
+        }
+        return static_cast<ComponentPool<T>*>(componentPools_[typeId].get());
     }
+
+    template <typename T>
+    const ComponentPool<T>* getPool() const {
+        auto typeId = Component::getTypeId<T>();
+        if (typeId >= componentPools_.size() || !componentPools_[typeId]) {
+            return nullptr;
+        }
+        return static_cast<const ComponentPool<T>*>(componentPools_[typeId].get());
+    }
+
+    /// Get all components of a type for iteration
+    template <typename T>
+    ComponentPool<T>& getAll() {
+        return getOrCreatePool<T>();
+    }
+
+    template <typename T>
+    const ComponentPool<T>& getAll() const {
+        static ComponentPool<T> emptyPool;
+        auto* pool = getPool<T>();
+        return pool ? *pool : emptyPool;
+    }
+
+    // =========================================================================
+    // Entity Management
+    // =========================================================================
 
     Entity createEntity() {
         Entity entity = nextEntityId_++;
@@ -73,66 +109,59 @@ public:
 
     void defer(std::function<void()>&& func) { deferredCommands_.push_back(std::move(func)); }
 
-    // Construct a component
+    /// Construct a component in-place for an entity
     template <typename T, typename... Args>
     T& emplace(Entity entity, Args&&... args) {
-        static_assert(std::is_base_of_v<Component, T>, "T must be a Component type");
-        auto& storage = componentStorages_[Component::getTypeId<T>()];
-        storage[entity] = std::make_unique<T>(std::forward<Args>(args)...);
+        auto& pool = getOrCreatePool<T>();
+        T& component = pool.emplace(entity, std::forward<Args>(args)...);
         defer([this, entity]() { onComponentAdded<T>(entity); });
-        return static_cast<T&>(*storage[entity]);
+        return component;
     }
 
-    // Construct a component for a prefab
+    /// Construct a component for a prefab
     template <typename T, typename... Args>
     T& emplace(const std::string& prefabName, Args&&... args) {
-        static_assert(std::is_base_of_v<Component, T>, "T must be a Component type");
-        auto& storage = componentStorages_[Component::getTypeId<T>()];
         Entity prefab = prefabEntities_[prefabName];
-        storage[prefab] = std::make_unique<T>(std::forward<Args>(args)...);
-        return static_cast<T&>(*storage[prefab]);
+        auto& pool = getOrCreatePool<T>();
+        return pool.emplace(prefab, std::forward<Args>(args)...);
     }
 
-    // Insert a component
+    /// Insert an existing component for an entity
     template <typename T>
     T& insert(Entity entity, T component, bool notify = true) {
-        static_assert(std::is_base_of_v<Component, T>, "T must be a Component type");
-        auto& storage = componentStorages_[Component::getTypeId<T>()];
-        storage[entity] = std::make_unique<T>(std::move(component));
+        auto& pool = getOrCreatePool<T>();
+        T& comp = pool.insert(entity, std::move(component));
         if (notify) {
             defer([this, entity]() { onComponentAdded<T>(entity); });
         } else {
-            // Update the entity signature without notifying systems
             entitySignatures_[entity].set(Component::getTypeId<T>());
         }
-        return static_cast<T&>(*storage[entity]);
+        return comp;
     }
 
-    // Insert a component for a prefab
+    /// Insert a component for a prefab
     template <typename T>
     T& insert(const std::string& prefabName, T component) {
-        static_assert(std::is_base_of_v<Component, T>, "T must be a Component type");
-        auto& storage = componentStorages_[Component::getTypeId<T>()];
         Entity prefab = prefabEntities_[prefabName];
-        storage[prefab] = std::make_unique<T>(std::move(component));
-        return static_cast<T&>(*storage[prefab]);
+        auto& pool = getOrCreatePool<T>();
+        return pool.insert(prefab, std::move(component));
     }
 
+    /// Copy a component from one entity to another
     template <typename T>
     void copy(Entity entity, Entity other, bool notify = true) {
-        static_assert(std::is_base_of_v<Component, T>, "T must be a Component type");
-        // Copy construct the component from the other entity
         if (T* otherComponent = get<T>(other)) {
             insert<T>(entity, *otherComponent, notify);
         }
     }
 
+    /// Copy multiple components from one entity to another
     template <typename... Ts>
     void copyAll(Entity entity, Entity other, bool notify = true) {
         (copy<Ts>(entity, other, notify), ...);
     }
 
-    // Add an entity to all systems that match its signature
+    /// Force an entity to be checked against all systems
     void forceCheck(Entity entity) {
         for (auto& system : systems_) {
             if ((system->getSignature() & entitySignatures_[entity]) == system->getSignature()) {
@@ -144,14 +173,11 @@ public:
     template <typename T, typename... Args>
     T& attach(Args&&... args) {
         static_assert(std::is_base_of_v<SystemBase, T>, "T must be a System type");
-        // Check if we already have a system of this type
         if (T* existingSystem = get<T>()) {
             return *existingSystem;
         }
-        // Create and add the new system
         systems_.push_back(std::make_unique<T>(std::forward<Args>(args)...));
         T& system = static_cast<T&>(*systems_.back());
-        // Add the entities that match the system's signature
         for (const auto& [entity, signature] : entitySignatures_) {
             if ((signature & system.getSignature()) == system.getSignature()) {
                 system.addEntity(entity);
@@ -161,6 +187,7 @@ public:
         return system;
     }
 
+    /// Remove an entity and all its components
     void erase(Entity entity) {
         defer([this, entity]() {
             onComponentRemoved(entity);
@@ -168,12 +195,13 @@ public:
         });
     }
 
+    /// Remove a specific component from an entity
     template <typename T>
     void erase(Entity entity) {
-        static_assert(std::is_base_of_v<Component, T>, "T must be a Component type");
         defer([this, entity]() { onComponentRemoved<T>(entity); });
     }
 
+    /// Remove a system by type
     template <typename T>
     void erase() {
         static_assert(std::is_base_of_v<SystemBase, T>, "T must be a System type");
@@ -186,18 +214,18 @@ public:
         }
     }
 
-    // Remove all components associated with the entity
+    /// Remove all components from an entity
     void eraseComponents(Entity entity) {
         defer([this, entity]() { onComponentRemoved(entity); });
     }
 
-    // Check if the entity has a specific component
-    // Signature updates are deferred, so has<T> will return false in the same frame emplace<T> was
-    // called
     template <typename T>
     bool has(Entity entity) const {
-        auto id = Component::getTypeId<T>();
-        return entitySignatures_.at(entity).test(id);
+        auto it = entitySignatures_.find(entity);
+        if (it == entitySignatures_.end()) {
+            return false;
+        }
+        return it->second.test(Component::getTypeId<T>());
     }
 
     template <typename... Ts>
@@ -205,7 +233,14 @@ public:
         return (has<Ts>(entity) && ...);
     }
 
-    // Expose systems for inspection
+    /// Iterate over all entities with a specific component
+    template <typename T, typename Func>
+    void each(Func&& func) {
+        if (auto* pool = getPool<T>()) {
+            pool->each(std::forward<Func>(func));
+        }
+    }
+
     const std::vector<std::unique_ptr<SystemBase>>& getSystems() const { return systems_; }
 
     void markAsExpired(Entity entity) { expiredEntities_.push_back(entity); }
@@ -267,7 +302,11 @@ private:
     template <typename T>
     void onComponentRemoved(Entity entity) {
         auto typeId = Component::getTypeId<T>();
-        Signature oldSignature = entitySignatures_[entity];
+        auto it = entitySignatures_.find(entity);
+        if (it == entitySignatures_.end()) {
+            return;
+        }
+        Signature oldSignature = it->second;
         if (!oldSignature[typeId]) {
             // Component does not exist, no need to update signature
             return;
@@ -286,11 +325,17 @@ private:
                 }
             }
         }
-        componentStorages_[typeId].erase(entity);
+        if (auto* pool = getPool<T>()) {
+            pool->erase(entity);
+        }
     }
 
     void onComponentRemoved(Entity entity) {
-        Signature oldSignature = entitySignatures_[entity];
+        auto it = entitySignatures_.find(entity);
+        if (it == entitySignatures_.end()) {
+            return;
+        }
+        Signature oldSignature = it->second;
         entitySignatures_[entity].reset();
 
         for (auto& system : systems_) {
@@ -298,20 +343,30 @@ private:
                 system->removeEntity(entity);
             }
         }
-        // Remove the components after notifying systems, so they can access
-        // the components in onEntityRemoved()
-        for (auto& storage : componentStorages_) {
-            storage.erase(entity);
+        for (auto& pool : componentPools_) {
+            if (pool) {
+                pool->erase(entity);
+            }
         }
     }
+
+    template <typename T>
+    ComponentPool<T>& getOrCreatePool() {
+        auto typeId = Component::getTypeId<T>();
+        if (typeId >= componentPools_.size()) {
+            componentPools_.resize(typeId + 1);
+        }
+        if (!componentPools_[typeId]) {
+            componentPools_[typeId] = std::make_unique<ComponentPool<T>>();
+        }
+        return *static_cast<ComponentPool<T>*>(componentPools_[typeId].get());
+    }
+
     std::vector<Entity> expiredEntities_;
     std::vector<std::function<void()>> deferredCommands_;
     std::unordered_map<std::string, Entity> prefabEntities_;
     std::unordered_map<Entity, Signature> entitySignatures_;
-    // std::unordered_map<Component::TypeId, std::unordered_map<Entity, std::unique_ptr<Component>>>
-    //     componentStorages_;
-    std::array<std::unordered_map<Entity, std::unique_ptr<Component>>, MAX_COMPONENT_TYPES>
-        componentStorages_;
+    std::vector<std::unique_ptr<IComponentPool>> componentPools_;
     std::vector<std::unique_ptr<SystemBase>> systems_;
     Entity nextEntityId_ = 1;  // NULL_ENTITY is 0
 };
