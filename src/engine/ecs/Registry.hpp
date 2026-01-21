@@ -18,10 +18,10 @@ namespace ast {
 
 class Registry {
 public:
-    using IComponentPool = ISparseSet;
+    using IComponentPool = ISparseSet<Entity>;
 
     template <typename T>
-    using ComponentPool = SparseSet<T>;
+    using ComponentPool = SparseSet<Entity, T>;
 
     /// Get a component pointer (nullptr if entity doesn't have the component)
     template <typename T>
