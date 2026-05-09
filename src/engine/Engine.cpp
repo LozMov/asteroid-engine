@@ -1,14 +1,14 @@
-#include "Engine.hpp"
+#include "asteroid/Engine.hpp"
 
 #include <SDL3_ttf/SDL_ttf.h>
 
 #include <filesystem>
 
-#include "Audio.hpp"
-#include "Cache.hpp"
-#include "Input.hpp"
-#include "events/Event.hpp"
-#include "events/EventBus.hpp"
+#include "asteroid/Audio.hpp"
+#include "asteroid/Cache.hpp"
+#include "asteroid/Input.hpp"
+#include "asteroid/Event.hpp"
+#include "asteroid/EventBus.hpp"
 
 namespace ast {
 
