@@ -12,16 +12,17 @@
 #include "SparseSet.hpp"
 #include "SystemBase.hpp"
 
-class SDL_Renderer;
-
 namespace ast {
 
-class Registry {
+template <EntityTraits ET>
+class BasicRegistry {
+    using EI = EntityInfo<ET>;
+
 public:
-    using IComponentPool = ISparseSet<Entity>;
+    using Entity = typename ET::Type;
 
     template <typename T>
-    using ComponentPool = SparseSet<Entity, T>;
+    using ComponentPool = SparseSet<ET, T>;
 
     /// Get a component pointer (nullptr if entity doesn't have the component)
     template <typename T>
@@ -31,12 +32,6 @@ public:
             return nullptr;
         }
         return const_cast<T*>(pool->get(entity));
-    }
-
-    /// Get a component reference (asserts if entity doesn't have the component)
-    template <typename T>
-    T& getUnchecked(Entity entity) {
-        return getOrCreatePool<T>().getUnchecked(entity);
     }
 
     /// Get a system by type
@@ -263,17 +258,6 @@ public:
         }
     }
 
-    struct Context {
-        enum class GameState { PLAYING, GAME_OVER, PAUSED, QUIT };
-        GameState gameState = GameState::PLAYING;
-        Entity playerEntity = NULL_ENTITY;
-        float screenWidth = 800.0f;
-        float screenHeight = 600.0f;
-        SDL_Renderer* renderer;
-    };
-
-    Context context;
-
 private:
     template <typename T>
     void onComponentAdded(Entity entity) {
@@ -366,9 +350,11 @@ private:
     std::vector<std::function<void()>> deferredCommands_;
     std::unordered_map<std::string, Entity> prefabEntities_;
     std::unordered_map<Entity, Signature> entitySignatures_;
-    std::vector<std::unique_ptr<IComponentPool>> componentPools_;
+    std::vector<std::unique_ptr<ISparseSet<ET>>> componentPools_;
     std::vector<std::unique_ptr<SystemBase>> systems_;
     Entity nextEntityId_ = 1;  // NULL_ENTITY is 0
 };
+
+using Registry = BasicRegistry<Entity32>;
 
 }  // namespace ast

@@ -8,7 +8,10 @@
 
 namespace ast {
 
-class Registry;
+template <EntityTraits ET>
+class BasicRegistry;
+
+using Registry = BasicRegistry<Entity32>;
 
 using Signature = std::bitset<64>;
 

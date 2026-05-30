@@ -5,28 +5,40 @@
 #include <limits>
 #include <vector>
 
+#include "Entity.hpp"
+
 namespace ast {
 
 /// Type-erased interface for SparseSet
-template <typename E>
+template <EntityTraits ET>
 class ISparseSet {
+    using Entity = typename ET::Type;
+
 public:
     virtual ~ISparseSet() = default;
-    virtual bool contains(E entity) const = 0;
-    virtual void erase(E entity) = 0;
+    virtual bool contains(Entity) const = 0;
+    virtual void erase(Entity) = 0;
     virtual std::size_t size() const = 0;
     virtual void clear() = 0;
 };
 
 /// A sparse set data structure for efficient entity-component storage.
-template <typename E, typename T>
-class SparseSet : public ISparseSet<E> {
+template <EntityTraits ET, typename T>
+class SparseSet : public ISparseSet<ET> {
+    using Entity = typename ET::Type;
+    using EInfo = EntityInfo<ET>;
+
 public:
-    static constexpr E INVALID_INDEX = std::numeric_limits<E>::max();
+
+    static constexpr auto INVALID_INDEX = std::numeric_limits<Entity>::max();
 
     /// Check if the set contains an entity
-    bool contains(E entity) const override {
-        return entity < sparse_.size() && sparse_[entity] != INVALID_INDEX;
+    bool contains(Entity entity) const override {
+        auto idx = EInfo::index(entity);
+        if (idx >= sparse_.size() || sparse_[idx] == INVALID_INDEX) {
+            return false;
+        }
+        return dense_[sparse_[idx]] == entity;
     }
 
     /// Get the number of elements in the set
@@ -37,73 +49,75 @@ public:
 
     /// Add an entity with a component (in-place construction)
     template <typename... Args>
-    T& emplace(E entity, Args&&... args) {
+    T& emplace(Entity entity, Args&&... args) {
         assert(!contains(entity) && "Entity already has this component");
 
-        if (entity >= sparse_.size()) {
-            sparse_.resize(entity + 1, INVALID_INDEX);
+        auto idx = EInfo::index(entity);
+        if (idx >= sparse_.size()) {
+            sparse_.resize(idx + 1, INVALID_INDEX);
         }
-        sparse_[entity] = static_cast<E>(dense_.size());
+        sparse_[idx] = static_cast<Entity>(dense_.size());
         dense_.push_back(entity);
         return components_.emplace_back(std::forward<Args>(args)...);
     }
 
     /// Add an entity with an existing component (move/copy)
-    T& insert(E entity, T component) {
+    T& insert(Entity entity, T component) {
         assert(!contains(entity) && "Entity already has this component");
 
-        if (entity >= sparse_.size()) {
-            sparse_.resize(entity + 1, INVALID_INDEX);
+        auto idx = EInfo::index(entity);
+        if (idx >= sparse_.size()) {
+            sparse_.resize(idx + 1, INVALID_INDEX);
         }
-        sparse_[entity] = static_cast<E>(dense_.size());
+        sparse_[idx] = static_cast<Entity>(dense_.size());
         dense_.push_back(entity);
         components_.push_back(std::move(component));
         return components_.back();
     }
 
     /// Remove an entity from the set
-    void erase(E entity) override {
+    void erase(Entity entity) override {
         if (!contains(entity)) {
             return;
         }
 
-        // Get index of entity to remove
-        E index = sparse_[entity];
+        auto idx = EInfo::index(entity);
+        Entity denseIdx = sparse_[idx];
         // Swap-and-pop
-        E lastEntity = dense_.back();
-        dense_[index] = lastEntity;
-        components_[index] = std::move(components_.back());
-        sparse_[lastEntity] = index;
+        Entity lastEntity = dense_.back();
+        dense_[denseIdx] = lastEntity;
+        components_[denseIdx] = std::move(components_.back());
+        sparse_[EInfo::index(lastEntity)] = denseIdx;
         dense_.pop_back();
         components_.pop_back();
-        sparse_[entity] = INVALID_INDEX;
+        sparse_[idx] = INVALID_INDEX;
     }
 
     /// Get a pointer to the component for an entity (nullptr if not found)
-    T* get(E entity) {
+    T* get(Entity entity) {
         if (!contains(entity)) {
             return nullptr;
         }
-        return &components_[sparse_[entity]];
+        return &components_[sparse_[EInfo::index(entity)]];
     }
 
     /// Get a const pointer to the component for an entity (nullptr if not found)
-    const T* get(E entity) const {
+    const T* get(Entity entity) const {
         if (!contains(entity)) {
             return nullptr;
         }
-        return &components_[sparse_[entity]];
+        return &components_[sparse_[EInfo::index(entity)]];
     }
 
     /// Get a reference to the component (assumes entity exists)
-    T& getUnchecked(E entity) {
+    T& getUnchecked(Entity entity) {
         assert(contains(entity) && "Entity does not have this component");
-        return components_[sparse_[entity]];
+        return components_[sparse_[EInfo::index(entity)]];
     }
 
-    const T& getUnchecked(E entity) const {
+    const T& getUnchecked(Entity entity) const {
         assert(contains(entity) && "Entity does not have this component");
-        return components_[sparse_[entity]];
+        return components_[sparse_[EInfo::index(entity)]];
     }
 
     /// Clear all entities and components
@@ -120,7 +134,7 @@ public:
     auto end() const { return components_.end(); }
 
     /// Get the dense array of entities
-    const std::vector<E>& entities() const { return dense_; }
+    const std::vector<Entity>& entities() const { return dense_; }
 
     /// Get the dense array of components
     std::vector<T>& components() { return components_; }
@@ -142,8 +156,8 @@ public:
     }
 
 private:
-    std::vector<E> sparse_;  // Entity -> index in dense array
-    std::vector<E> dense_;   // Index -> Entity
+    std::vector<Entity> sparse_;  // Entity -> index in dense array
+    std::vector<Entity> dense_;   // Index -> Entity
     std::vector<T> components_;   // Index -> Component
 };
 
